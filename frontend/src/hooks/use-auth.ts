@@ -3,16 +3,15 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-// URL бэкенда - можно задать через переменную окружения NEXT_PUBLIC_BACKEND_URL
-// В Next.js переменные окружения с NEXT_PUBLIC_ доступны в клиентских компонентах
-const BACKEND_URL = 'http://localhost:3001';
+// URL бэкенда - использует переменную окружения или fallback на localhost
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
 
 interface User {
   email: string;
   role: string;
 }
 
-export function useAuth(requiredRole?: string) {
+export function useAuth(requiredRole?: string | string[]) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -55,11 +54,11 @@ export function useAuth(requiredRole?: string) {
         if (requiredRole && userData.role !== requiredRole) {
           // Неправильная роль - перенаправляем на соответствующую страницу
           if (userData.role === 'teacher') {
-            router.push('/teacher');
+            router.push('/manager');
           } else if (userData.role === 'student') {
             router.push('/student');
           } else if (userData.role === 'manager') {
-            router.push('/mng');
+            router.push('/manager');
           } else {
             router.push('/');
           }
@@ -80,7 +79,8 @@ export function useAuth(requiredRole?: string) {
     };
 
     checkAuth();
-  }, [router, requiredRole]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run only once on mount - requiredRole and router are stable
 
   return { isLoading, isAuthenticated, user };
 }
