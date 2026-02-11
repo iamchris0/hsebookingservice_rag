@@ -22,7 +22,7 @@ const requiredEnvVars = [
 
 for (const envVar of requiredEnvVars) {
   if (!process.env[envVar]) {
-    throw new Error(`Missing required environment variable: ${envVar}`);
+    throw new Error(`Пропущены обязательные переменные окружения: ${envVar}`);
   }
 }
 
@@ -78,7 +78,7 @@ await app.register(rateLimit, {
 await app.register(jwt, {
   secret: process.env.JWT_SECRET!,
   sign: {
-    expiresIn: process.env.JWT_EXPIRES_IN || "7d",
+    expiresIn: process.env.JWT_EXPIRES_IN || "1h",
     algorithm: "HS256",
   },
   verify: {
@@ -98,10 +98,10 @@ app.addHook("onReady", async () => {
     const client = await app.pg.connect();
     await client.query("SELECT NOW()");
     client.release();
-    app.log.info("✅ PostgreSQL connection established successfully");
+    app.log.info("✅ PostgreSQL соединение успешно установлено");
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    app.log.error(`❌ Failed to connect to PostgreSQL: ${errorMessage}`);
+    app.log.error(`❌ Не удалось подключиться к PostgreSQL: ${errorMessage}`);
     throw error;
   }
 });
@@ -165,11 +165,6 @@ app.post<{
 }>("/api/login", async (request, reply) => {
   const { email, password } = request.body;
 
-  if (!email || !password) {
-    reply.code(400).send({ error: "Email and password are required" });
-    return;
-  }
-
   try {
     const client = await app.pg.connect();
     
@@ -213,7 +208,7 @@ app.post<{
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     app.log.error(`Login error: ${errorMessage}`);
-    reply.code(500).send({ error: "Internal server error" });
+    reply.code(500).send({ error: "Внутренняя ошибка сервера" });
   }
 });
 
@@ -301,10 +296,10 @@ const host = process.env.HOST || "0.0.0.0";
 
 try {
   await app.listen({ port, host });
-  app.log.info(`🚀 Server is running on http://${host}:${port}`);
-  app.log.info(`📊 Environment: ${process.env.NODE_ENV || "development"}`);
+  app.log.info(`🚀 Сервер запущен на http://${host}:${port}`);
+  app.log.info(`📊 Окружение: ${process.env.NODE_ENV || "development"}`);
 } catch (error) {
   const errorMessage = error instanceof Error ? error.message : String(error);
-  app.log.error(`Failed to start server: ${errorMessage}`);
+  app.log.error(`Не удалось запустить сервер: ${errorMessage}`);
   process.exit(1);
 }
