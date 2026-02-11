@@ -11,7 +11,7 @@ export default function ManagerLayout({
 }: {
   children: React.ReactNode
 }) {
-  const { isLoading, isAuthenticated } = useAuth('teacher');
+  const { isLoading, isAuthenticated } = useAuth('manager');
   const [activeTab, setActiveTab] = useState<string>("Courses");
 
   if (isLoading) {
