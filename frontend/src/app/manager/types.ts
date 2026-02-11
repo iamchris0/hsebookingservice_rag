@@ -1,3 +1,23 @@
-// Типы для роли менеджера (Manager)
+// Types for Manager role
 
-// Здесь будут типы для управления пользователями, документами знаний и т.д.
+export type Discipline = "Data Analysis" | "Programming" | "Machine Learning" | "Mathematics"
+
+export interface LinkRow {
+  name: string
+  url: string
+}
+
+export interface CourseData {
+  discipline: Discipline
+  teacherName: string
+  faculty: string
+  program: string
+  numberOfGroups: number
+  duration: number[]
+  links: LinkRow[]
+  assistantName?: string
+}
+
+export interface Course extends CourseData {
+  id: string
+}
