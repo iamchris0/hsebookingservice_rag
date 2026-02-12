@@ -3,7 +3,6 @@
 import { useState } from "react"
 import { Card } from "@/components/ui/card"
 import { GroupCard } from "./group-card"
-import { CreateGroupDialog } from "./create-group-dialog"
 import { Brain, BarChart3, Code, Calculator } from "lucide-react"
 import { GroupFilters } from "../components/group-filters"
 import { CollapsibleSection } from "./collapsible-section"
@@ -204,8 +203,6 @@ export function MyGroupsSection() {
           ))}
         </div>
       </CollapsibleSection>
-
-      <CreateGroupDialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen} />
     </div>
   )
 }
