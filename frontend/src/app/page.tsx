@@ -51,7 +51,7 @@ export default function Login() {
       } else if (role === 'student') {
         router.push('/student');
       } else if (role === 'manager') {
-        router.push('/mng');
+        router.push('/manager');
       } else {
         setError('Неизвестная роль пользователя');
         setIsLoading(false);
@@ -175,21 +175,21 @@ export default function Login() {
               borderRadius: '12px'
             }}
           >
-            {isLoading ? 'Вход...' : 'Sign In'}
+            {isLoading ? 'Вход...' : 'Войти'}
           </button>
         </form>
 
         {/* Register Link */}
         <div className="text-center">
           <p className="text-sm p-4" style={{ color: '#666666' }}>
-            Haven't registered yet?{' '}
+            Еще не зарегистрированы?{' '}
             <button
               type="button"
               className="hover:opacity-70 transition-opacity font-semibold"
               style={{ color: '#ff1ef7' }}
               onClick={() => console.log('Register clicked')}
             >
-              Click here
+              Нажмите здесь
             </button>
           </p>
         </div>
@@ -202,7 +202,7 @@ export default function Login() {
               style={{ color: '#ff1ef7' }}
               onClick={() => console.log('Recover password clicked')}
             >
-              Recover password
+              Восстановить пароль
             </button>
           </div>
       </div>
