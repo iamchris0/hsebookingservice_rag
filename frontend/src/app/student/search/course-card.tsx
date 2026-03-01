@@ -15,8 +15,7 @@ export function CourseCard({
   email,
   program,
   numberOfGroups,
-  duration,
-  links,
+  duration
 }: CourseCardProps) {
 
   const [isSelected, setIsSelected] = useState(false)
@@ -84,7 +83,7 @@ export function CourseCard({
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-xs mb-0.5" style={{ color: "#2300fa" }}>
-              Number of groups
+              Кол-во свободных групп
             </p>
             <p className="text-xs font-medium text-black capitalize leading-tight">{numberOfGroups}</p>
           </div>
@@ -113,12 +112,6 @@ export function CourseCard({
         <div className="flex gap-2 mt-4">
           <Button 
             variant="outline" 
-            className="flex-1 rounded-full border-[#2300fa] text-[#2300fa] bg-transparent hover:bg-blue-50 text-sm h-9"
-          >
-            Learn More
-          </Button>
-          <Button 
-            variant="outline" 
             className="flex-1 rounded-full border-[#000000] bg-[#DCFF05] hover:bg-[#c9eb00] text-black text-sm h-9"
             onClick={() => setIsSelected(true)}
           >
@@ -130,6 +123,9 @@ export function CourseCard({
           isOpen={isSelected}
           onClose={() => setIsSelected(false)}
           teacherName={teacherName}
+          discipline={discipline}
+          program={program}
+          numberOfGroups={numberOfGroups}
         />
       </CardContent>
     </Card>

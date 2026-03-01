@@ -1,16 +1,24 @@
 "use client"
 
-import { useState } from 'react'
-
-import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
-
-import { DeleteCourseDialog } from './delete-group-dialog'
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 
 import { Mail, BookOpen, GraduationCap, Users } from "lucide-react"
 import { CourseCardProps } from "../types"
-import { Button } from "@/components/ui/button"
 
+function getPricePerMonth(discipline: string): number {
+  const lower = discipline.toLowerCase()
+  if (lower.includes("машинное обучение") || lower.includes("анализ данных")) return 6000
+  if (lower.includes("python") || lower.includes("питон")) return 5000
+  if (lower.includes("математик")) return 4000
+  return 0
+}
 
+function calculateCost(discipline: string, numberOfGroups: number, duration: number[]): number {
+  const price = getPricePerMonth(discipline)
+  if (price === 0) return 0
+  const totalMonths = duration.reduce((sum, mod) => sum + (mod <= 2 ? 2 : 3), 0)
+  return price * totalMonths * numberOfGroups
+}
 
 export function CourseCard({
   discipline,
@@ -18,11 +26,10 @@ export function CourseCard({
   email,
   program,
   numberOfGroups,
-  duration,
-  links,
+  duration
 }: CourseCardProps) {
 
-  const [isDelete, setIsDelete] = useState(false)
+  const cost = calculateCost(discipline, numberOfGroups, duration)
 
   return (
     <Card className="bg-white shadow-sm hover:shadow-lg transition-shadow duration-300 border border-gray-100 rounded-2xl overflow-hidden flex flex-col">
@@ -30,6 +37,11 @@ export function CourseCard({
         <h2 className="text-base font-bold text-[#000000] min-h-[32px] leading-tight">
           {teacherName}
         </h2>
+        {cost > 0 && (
+          <span className="text-xs font-semibold border border-gray-300 rounded-full px-2 py-0.5 text-gray-500 whitespace-nowrap ml-2 flex-shrink-0 self-start">
+            ~{cost.toLocaleString("ru-RU")}₽
+          </span>
+        )}
       </CardHeader>
 
       <CardContent className="space-y-2 px-4 pb-4 flex-1">
@@ -111,29 +123,6 @@ export function CourseCard({
             ))}
           </div>
         </div>
-
-        {/* Buttons */}
-        <div className="flex gap-2 mt-4">
-          <Button 
-            variant="outline" 
-            className="flex-1 rounded-full border-[#2300fa] text-[#2300fa] bg-transparent hover:bg-blue-50 text-sm h-9"
-          >
-            Learn More
-          </Button>
-          <Button 
-            variant="outline" 
-            className="flex-1 rounded-full border-[#000000] bg-[#FF1EF7] hover:bg-[#c9eb00] text-white text-sm h-9"
-            onClick={() => setIsDelete(true)}
-          >
-            Удалить
-          </Button>
-        </div>
-
-        <DeleteCourseDialog
-          isOpen={isDelete}
-          onClose={() => setIsDelete(false)}
-          teacherName={teacherName}
-        />
       </CardContent>
     </Card>
   )
