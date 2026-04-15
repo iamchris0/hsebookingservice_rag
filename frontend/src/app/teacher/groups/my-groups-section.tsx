@@ -1,208 +1,128 @@
 "use client"
 
-import { useState } from "react"
-import { Card } from "@/components/ui/card"
+import { useState, useEffect } from "react"
 import { GroupCard } from "./group-card"
-import { Brain, BarChart3, Code, Calculator } from "lucide-react"
-import { GroupFilters } from "../components/group-filters"
+import { GroupDetailsDialog } from "./group-details-dialog"
 import { CollapsibleSection } from "./collapsible-section"
+import { TeacherOffer, TeacherBooking } from "../types"
+import { toDisplayDiscipline } from "@/lib/disciplines"
 
-const disciplineStats = [
-  {
-    id: "ml",
-    name: "Machine Learning",
-    count: 24,
-    icon: Brain,
-    color: "#8B5CF6",
-  },
-  {
-    id: "da",
-    name: "Data Analysis",
-    count: 18,
-    icon: BarChart3,
-    color: "#3B82F6",
-  },
-  {
-    id: "py",
-    name: "Python",
-    count: 32,
-    icon: Code,
-    color: "#10B981",
-  },
-  {
-    id: "math",
-    name: "Mathematics",
-    count: 15,
-    icon: Calculator,
-    color: "#F59E0B",
-  },
-]
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001"
 
-// Groups without an assistant (no name, payment is "-")
-const groupsWithoutAssistant = [
-  {
-    id: "no-1",
-    email: "group101@university.edu",
-    program: "Программа двух дипломов НИУ ВШЭ и Университета Кёнхи",
-    discipline: "Машинное обучение",
-    studyPeriod: "1-2",
-  },
-  {
-    id: "no-2",
-    email: "group102@university.edu",
-    program: "Управление в креативных индустриях",
-    discipline: "Программирование на Python",
-    studyPeriod: "2-3",
-  },
-  {
-    id: "no-3",
-    email: "group103@university.edu",
-    program: "Экономика и статистика",
-    discipline: "Анализ данных",
-    studyPeriod: "3-4",
-  },
-]
-
-// Мои группы (with assistant assigned)
-const myGroups = [
-  {
-    id: "my-1",
-    lastName: "Smith",
-    firstName: "John",
-    email: "john.smith@university.edu",
-    program: "Программа двух дипломов НИУ ВШЭ и Университета Кёнхи",
-    discipline: "Машинное обучение",
-    studyPeriod: "1",
-    paymentFormat: "money",
-  },
-  {
-    id: "my-2",
-    lastName: "Johnson",
-    firstName: "Emma",
-    email: "emma.johnson@university.edu",
-    program: "Управление в креативных индустриях",
-    discipline: "Программирование на Python",
-    studyPeriod: "2-3",
-    paymentFormat: "credits",
-  },
-  {
-    id: "my-3",
-    lastName: "Williams",
-    firstName: "Michael",
-    email: "michael.williams@university.edu",
-    program: "Экономика и статистика",
-    discipline: "Цифровая грамотность",
-    studyPeriod: "3-4",
-    paymentFormat: "money",
-  },
-  {
-    id: "my-4",
-    lastName: "Brown",
-    firstName: "Sophia",
-    email: "sophia.brown@university.edu",
-    program: "География глобальных изменений и геоинформационные технологии",
-    discipline: "Анализ данных",
-    studyPeriod: "1-2",
-    paymentFormat: "credits",
-  },
-]
-
-// Archive groups
-const archiveGroups = [
-  {
-    id: "arch-1",
-    lastName: "Davis",
-    firstName: "Oliver",
-    email: "oliver.davis@university.edu",
-    program: "Organic Chemistry",
-    discipline: "Chemistry",
-    studyPeriod: "2-3",
-    paymentFormat: "money",
-  },
-  {
-    id: "arch-2",
-    lastName: "Miller",
-    firstName: "Ava",
-    email: "ava.miller@university.edu",
-    program: "Physics Advanced",
-    discipline: "Quantum Mechanics",
-    studyPeriod: "1-2",
-    paymentFormat: "credits",
-  },
-]
+type SelectedItem = { offer: TeacherOffer; booking: TeacherBooking } | null
 
 export function MyGroupsSection() {
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+  const [offers, setOffers] = useState<TeacherOffer[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [selectedItem, setSelectedItem] = useState<SelectedItem>(null)
+
+  useEffect(() => {
+    const fetchGroups = async () => {
+      try {
+        const token = localStorage.getItem("token")
+        const response = await fetch(`${BACKEND_URL}/api/teacher/groups`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!response.ok) return
+        const raw: TeacherOffer[] = await response.json()
+        const mapped = raw.map((o) => ({
+          ...o,
+          discipline: toDisplayDiscipline(o.discipline),
+        }))
+        setOffers(mapped)
+      } catch {
+        // fail silently
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchGroups()
+  }, [])
+
+  // Offers with no bookings yet → "groups without assistant"
+  const withoutAssistant = offers.filter((o) => o.bookings.length === 0)
+  // All bookings across offers → "my groups"
+  const myGroupItems = offers.flatMap((o) =>
+    o.bookings.map((b: TeacherBooking) => ({ offer: o, booking: b }))
+  )
 
   return (
     <div className="space-y-6">
+      <GroupDetailsDialog
+        isOpen={selectedItem !== null}
+        onClose={() => setSelectedItem(null)}
+        offer={selectedItem?.offer ?? null}
+        booking={selectedItem?.booking ?? null}
+      />
 
-      {/* Discipline Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {disciplineStats.map((stat) => {
-          const Icon = stat.icon
-          return (
-            <Card
-              key={stat.id}
-              className="p-4 bg-white hover:shadow-md transition-shadow cursor-pointer"
-            >
-              <div className="flex items-center gap-3">
-                <div
-                  className="w-10 h-10 rounded-full flex items-center justify-center"
-                  style={{ backgroundColor: `${stat.color}20` }}
-                >
-                  <Icon className="w-5 h-5" style={{ color: stat.color }} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-2xl font-bold text-black">{stat.count}</p>
-                  <p className="text-xs text-gray-500 truncate">{stat.name}</p>
-                </div>
+      {isLoading && (
+        <div className="text-sm text-gray-500 p-4">Загрузка...</div>
+      )}
+
+      {!isLoading && (
+        <>
+          {/* Section 1: Groups without an assistant */}
+          <CollapsibleSection
+            title="Groups without an assistant"
+            count={withoutAssistant.length}
+            defaultOpen={true}
+          >
+            {withoutAssistant.length === 0 ? (
+              <p className="text-sm text-gray-400 italic p-2">No groups without an assistant.</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {withoutAssistant.map((offer) => (
+                  <GroupCard
+                    key={offer.id}
+                    offerId={String(offer.id)}
+                    discipline={offer.discipline}
+                    program={offer.program}
+                    modules={offer.modules}
+                    hideAssistantName={true}
+                    hideMoreDetails={true}
+                  />
+                ))}
               </div>
-            </Card>
-          )
-        })}
-      </div>
+            )}
+          </CollapsibleSection>
 
-      <GroupFilters />
+          {/* Section 2: My groups (booked) */}
+          <CollapsibleSection
+            title="Мои группы"
+            count={myGroupItems.length}
+            defaultOpen={true}
+          >
+            {myGroupItems.length === 0 ? (
+              <p className="text-sm text-gray-400 italic p-2">No groups assigned yet.</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {myGroupItems.map(({ offer, booking }) => (
+                  <GroupCard
+                    key={booking.booking_id}
+                    offerId={String(offer.id)}
+                    discipline={offer.discipline}
+                    program={offer.program}
+                    modules={offer.modules}
+                    studentFirstName={booking.student_first_name}
+                    studentLastName={booking.student_last_name}
+                    studentEmail={booking.student_email}
+                    onMoreDetails={() => setSelectedItem({ offer, booking })}
+                  />
+                ))}
+              </div>
+            )}
+          </CollapsibleSection>
 
-      {/* Section 1: Groups without an assistant */}
-      <CollapsibleSection
-        title="Groups without an assistant"
-        count={groupsWithoutAssistant.length}
-        defaultOpen={true}
-      >
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {groupsWithoutAssistant.map((group) => (
-            <GroupCard key={group.id} {...group} hideAssistantName={true} />
-          ))}
-        </div>
-      </CollapsibleSection>
-
-      {/* Section 2: Мои группы */}
-      <CollapsibleSection
-        title="Мои группы"
-        count={myGroups.length}
-        defaultOpen={true}
-      >
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {myGroups.map((group) => (
-            <GroupCard key={group.id} {...group} />
-          ))}
-        </div>
-      </CollapsibleSection>
-
-      {/* Section 3: Archive groups (collapsed by default) */}
-      <CollapsibleSection
-        title="Archive groups"
-        count={archiveGroups.length}
-        defaultOpen={false}
-      >
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {archiveGroups.map((group) => (
-            <GroupCard key={group.id} {...group} />
-          ))}
-        </div>
-      </CollapsibleSection>
+          {/* Section 3: Archive (empty for now) */}
+          <CollapsibleSection
+            title="Archive groups"
+            count={0}
+            defaultOpen={false}
+          >
+            <p className="text-sm text-gray-400 italic p-2">No archived groups.</p>
+          </CollapsibleSection>
+        </>
+      )}
     </div>
   )
 }

@@ -107,6 +107,10 @@ app.addHook("onReady", async () => {
       );
     `);
 
+    await client.query(`
+      ALTER TABLE offers ADD COLUMN IF NOT EXISTS manager_id INTEGER REFERENCES users_new(id);
+    `);
+
     client.release();
     app.log.info("✅ PostgreSQL соединение успешно установлено");
   } catch (error) {
@@ -408,6 +412,8 @@ app.get(
            u.first_name,
            u.last_name,
            u.email AS teacher_email,
+           m.first_name AS manager_first_name,
+           m.last_name AS manager_last_name,
            COALESCE(
              json_agg(json_build_object('name', ol.name, 'url', ol.url))
                FILTER (WHERE ol.id IS NOT NULL),
@@ -415,9 +421,10 @@ app.get(
            ) AS links
          FROM offers o
          JOIN users_new u ON o.teacher_id = u.id
+         LEFT JOIN users_new m ON m.id = o.manager_id
          LEFT JOIN offer_links ol ON ol.offer_id = o.id
          WHERE o.active = true
-         GROUP BY o.id, u.id, u.first_name, u.last_name, u.email
+         GROUP BY o.id, u.id, u.first_name, u.last_name, u.email, m.first_name, m.last_name
          ORDER BY o.created_at DESC`
       );
       return result.rows;
@@ -453,13 +460,15 @@ app.post<{
       return reply.code(400).send({ error: "Некорректные данные запроса" });
     }
 
+    const manager = request.user as { id: number };
+
     const client = await app.pg.connect();
     try {
       const result = await client.query(
-        `INSERT INTO offers (teacher_id, discipline, faculty, program, total_groups, modules)
-         VALUES ($1, $2, $3, $4, $5, $6)
+        `INSERT INTO offers (teacher_id, discipline, faculty, program, total_groups, modules, manager_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING id`,
-        [teacherId, discipline, faculty ?? "", program, totalGroups, modules]
+        [teacherId, discipline, faculty ?? "", program, totalGroups, modules, manager.id]
       );
 
       const offerId = result.rows[0].id;
@@ -476,6 +485,66 @@ app.post<{
       }
 
       return reply.code(201).send({ id: offerId });
+    } finally {
+      client.release();
+    }
+  }
+);
+
+// ─── Teacher endpoints ────────────────────────────────────────────────────────
+
+// GET /api/teacher/groups — все активные предложения для текущего преподавателя с бронированиями
+app.get(
+  "/api/teacher/groups",
+  { preHandler: [app.authenticate] },
+  async (request, reply) => {
+    const user = request.user as { id: number; role: string };
+    if (user.role !== "teacher") {
+      return reply.code(403).send({ error: "Forbidden" });
+    }
+    const client = await app.pg.connect();
+    try {
+      const result = await client.query(
+        `SELECT
+           o.id,
+           o.discipline,
+           o.faculty,
+           o.program,
+           o.total_groups,
+           o.modules,
+           m.first_name AS manager_first_name,
+           m.last_name  AS manager_last_name,
+           (o.total_groups - COALESCE((
+             SELECT SUM(b2.groups_count) FROM bookings b2
+             WHERE b2.teacher_id = o.teacher_id
+               AND b2.discipline = o.discipline
+               AND b2.active = true
+           ), 0)) AS available_groups,
+           COALESCE((
+             SELECT json_agg(json_build_object('name', ol.name, 'url', ol.url))
+             FROM offer_links ol WHERE ol.offer_id = o.id
+           ), '[]') AS links,
+           COALESCE((
+             SELECT json_agg(json_build_object(
+               'booking_id', b.id,
+               'groups_count', b.groups_count,
+               'student_first_name', s.first_name,
+               'student_last_name', s.last_name,
+               'student_email', s.email
+             ))
+             FROM bookings b
+             JOIN users_new s ON s.id = b.student_id
+             WHERE b.teacher_id = o.teacher_id
+               AND b.discipline = o.discipline
+               AND b.active = true
+           ), '[]') AS bookings
+         FROM offers o
+         LEFT JOIN users_new m ON m.id = o.manager_id
+         WHERE o.teacher_id = $1 AND o.active = true
+         ORDER BY o.created_at DESC`,
+        [user.id]
+      );
+      return result.rows;
     } finally {
       client.release();
     }
