@@ -98,19 +98,6 @@ app.addHook("onReady", async () => {
     const client = await app.pg.connect();
     await client.query("SELECT NOW()");
 
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS offer_links (
-        id SERIAL PRIMARY KEY,
-        offer_id INTEGER NOT NULL REFERENCES offers(id) ON DELETE CASCADE,
-        name VARCHAR(200) NOT NULL,
-        url TEXT NOT NULL
-      );
-    `);
-
-    await client.query(`
-      ALTER TABLE offers ADD COLUMN IF NOT EXISTS manager_id INTEGER REFERENCES users_new(id);
-    `);
-
     client.release();
     app.log.info("✅ PostgreSQL соединение успешно установлено");
   } catch (error) {
