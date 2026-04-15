@@ -76,6 +76,7 @@ export function CoursesPage() {
           teacher_id: number
           first_name: string
           last_name: string
+          links: { name: string; url: string }[]
         }) => ({
           id: String(row.id),
           teacherId: row.teacher_id,
@@ -85,7 +86,7 @@ export function CoursesPage() {
           program: row.program,
           numberOfGroups: row.total_groups,
           duration: row.modules ?? [],
-          links: [],
+          links: row.links ?? [],
         }))
 
         setCourses(mapped)
@@ -131,6 +132,7 @@ export function CoursesPage() {
           program: data.program,
           totalGroups: data.numberOfGroups,
           modules: data.duration,
+          links: data.links,
         }),
       })
 

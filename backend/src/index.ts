@@ -92,11 +92,21 @@ await app.register(postgres, {
   ssl: process.env.DB_SSL === "true" ? { rejectUnauthorized: false } : false,
 });
 
-// Проверка подключения к базе данных
+// Проверка подключения к базе данных и создание таблиц
 app.addHook("onReady", async () => {
   try {
     const client = await app.pg.connect();
     await client.query("SELECT NOW()");
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS offer_links (
+        id SERIAL PRIMARY KEY,
+        offer_id INTEGER NOT NULL REFERENCES offers(id) ON DELETE CASCADE,
+        name VARCHAR(200) NOT NULL,
+        url TEXT NOT NULL
+      );
+    `);
+
     client.release();
     app.log.info("✅ PostgreSQL соединение успешно установлено");
   } catch (error) {
@@ -150,7 +160,7 @@ app.get("/health", async (_request, reply) => {
 app.get(
   "/api/protected",
   { preHandler: [app.authenticate] },
-  async (request, reply) => {
+  async (request, _reply) => {
     return {
       message: "This is a protected route",
       user: request.user, // JWT payload доступен через request.user
@@ -375,7 +385,7 @@ app.get(
 
 // ─── Manager endpoints ────────────────────────────────────────────────────────
 
-// GET /api/manager/offers — все активные предложения
+// GET /api/manager/offers — все активные предложения с ссылками
 app.get(
   "/api/manager/offers",
   { preHandler: [app.authenticate] },
@@ -397,10 +407,17 @@ app.get(
            u.id AS teacher_id,
            u.first_name,
            u.last_name,
-           u.email AS teacher_email
+           u.email AS teacher_email,
+           COALESCE(
+             json_agg(json_build_object('name', ol.name, 'url', ol.url))
+               FILTER (WHERE ol.id IS NOT NULL),
+             '[]'
+           ) AS links
          FROM offers o
          JOIN users_new u ON o.teacher_id = u.id
+         LEFT JOIN offer_links ol ON ol.offer_id = o.id
          WHERE o.active = true
+         GROUP BY o.id, u.id, u.first_name, u.last_name, u.email
          ORDER BY o.created_at DESC`
       );
       return result.rows;
@@ -410,7 +427,7 @@ app.get(
   }
 );
 
-// POST /api/manager/offers — создать новое предложение
+// POST /api/manager/offers — создать новое предложение со ссылками
 app.post<{
   Body: {
     teacherId: number;
@@ -419,6 +436,7 @@ app.post<{
     program: string;
     totalGroups: number;
     modules: number[];
+    links: { name: string; url: string }[];
   };
 }>(
   "/api/manager/offers",
@@ -429,7 +447,7 @@ app.post<{
       return reply.code(403).send({ error: "Forbidden" });
     }
 
-    const { teacherId, discipline, faculty, program, totalGroups, modules } = request.body;
+    const { teacherId, discipline, faculty, program, totalGroups, modules, links } = request.body;
 
     if (!teacherId || !discipline || !program || !totalGroups || !modules?.length) {
       return reply.code(400).send({ error: "Некорректные данные запроса" });
@@ -443,7 +461,21 @@ app.post<{
          RETURNING id`,
         [teacherId, discipline, faculty ?? "", program, totalGroups, modules]
       );
-      return reply.code(201).send({ id: result.rows[0].id });
+
+      const offerId = result.rows[0].id;
+
+      if (links && links.length > 0) {
+        for (const link of links) {
+          if (link.name && link.url) {
+            await client.query(
+              `INSERT INTO offer_links (offer_id, name, url) VALUES ($1, $2, $3)`,
+              [offerId, link.name, link.url]
+            );
+          }
+        }
+      }
+
+      return reply.code(201).send({ id: offerId });
     } finally {
       client.release();
     }
