@@ -5,7 +5,10 @@
 export type UserRole = "student" | "teacher" | "manager";
 
 export interface User {
+  id: number;
   email: string;
   role: UserRole;
+  firstName?: string;
+  lastName?: string;
 }
 

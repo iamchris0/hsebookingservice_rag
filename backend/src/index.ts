@@ -123,7 +123,7 @@ declare module "fastify" {
 }
 
 // Health check endpoint (публичный)
-app.get("/health", async (request, reply) => {
+app.get("/health", async (_request, reply) => {
   try {
     // Проверяем подключение к БД
     const client = await app.pg.connect();
@@ -147,7 +147,6 @@ app.get("/health", async (request, reply) => {
   }
 });
 
-// Пример защищенного endpoint (требует JWT токен)
 app.get(
   "/api/protected",
   { preHandler: [app.authenticate] },
@@ -168,12 +167,12 @@ app.post<{
   try {
     const client = await app.pg.connect();
     
-    // Получаем пароль и роль из базы данных
+    // Получаем id, пароль, роль и имя из базы данных
     const result = await client.query(
-      "SELECT password, role FROM users_new WHERE email = $1",
+      "SELECT id, password, role, first_name, last_name FROM users_new WHERE email = $1",
       [email]
     );
-    
+
     client.release();
 
     // Проверяем, существует ли пользователь
@@ -182,7 +181,7 @@ app.post<{
       return;
     }
 
-    const { password: hashedPassword, role } = result.rows[0];
+    const { id, password: hashedPassword, role, first_name, last_name } = result.rows[0];
 
     // Проверяем пароль
     const isPasswordValid = await bcrypt.compare(password, hashedPassword);
@@ -192,17 +191,17 @@ app.post<{
       return;
     }
 
-    // Генерируем JWT токен
-    const token = app.jwt.sign({
-      email: email,
-      role: role,
-    });
+    // Генерируем JWT токен (включаем id для последующих запросов)
+    const token = app.jwt.sign({ id, email, role });
 
     return {
       token,
       user: {
-        email: email,
-        role: role,
+        id,
+        email,
+        role,
+        firstName: first_name,
+        lastName: last_name,
       },
     };
   } catch (error) {
@@ -212,11 +211,315 @@ app.post<{
   }
 });
 
+// ─── Student endpoints ────────────────────────────────────────────────────────
+
+// GET /api/student/my-groups — активные записи текущего студента
+app.get(
+  "/api/student/my-groups",
+  { preHandler: [app.authenticate] },
+  async (request, reply) => {
+    const user = request.user as { id: number; email: string; role: string };
+
+    if (user.role !== "student") {
+      return reply.code(403).send({ error: "Forbidden" });
+    }
+
+    const client = await app.pg.connect();
+    try {
+      const result = await client.query(
+        `SELECT
+           b.id,
+           b.discipline,
+           b.groups_count,
+           b.program,
+           CASE WHEN b.module IS NOT NULL THEN ARRAY[b.module] ELSE ARRAY[]::integer[] END AS modules,
+           u.first_name,
+           u.last_name,
+           u.email AS teacher_email
+         FROM bookings b
+         JOIN users_new u ON b.teacher_id = u.id
+         WHERE b.student_id = $1 AND b.active = true
+         ORDER BY b.created_at DESC`,
+        [user.id]
+      );
+      return result.rows;
+    } finally {
+      client.release();
+    }
+  }
+);
+
+// GET /api/student/search — доступные предложения от менеджеров
+app.get(
+  "/api/student/search",
+  { preHandler: [app.authenticate] },
+  async (_request, _reply) => {
+    const client = await app.pg.connect();
+    try {
+      const result = await client.query(
+        `SELECT
+           o.id,
+           o.discipline,
+           o.program,
+           o.modules,
+           o.total_groups,
+           u.first_name,
+           u.last_name,
+           u.email AS teacher_email,
+           (o.total_groups - COALESCE(SUM(b.groups_count), 0)) AS available_groups
+         FROM offers o
+         JOIN users_new u ON o.teacher_id = u.id
+         LEFT JOIN bookings b
+           ON b.teacher_id = o.teacher_id
+          AND b.discipline = o.discipline
+          AND b.active = true
+         WHERE o.active = true
+         GROUP BY o.id, u.id, u.first_name, u.last_name, u.email
+         HAVING (o.total_groups - COALESCE(SUM(b.groups_count), 0)) > 0
+         ORDER BY o.created_at DESC`
+      );
+      return result.rows;
+    } finally {
+      client.release();
+    }
+  }
+);
+
+// POST /api/student/bookings — студент записывается на предложение
+app.post<{
+  Body: { offerId: number; groupsCount: number };
+}>(
+  "/api/student/bookings",
+  { preHandler: [app.authenticate] },
+  async (request, reply) => {
+    const user = request.user as { id: number; email: string; role: string };
+
+    if (user.role !== "student") {
+      return reply.code(403).send({ error: "Forbidden" });
+    }
+
+    const { offerId, groupsCount } = request.body;
+
+    if (!offerId || !groupsCount || groupsCount < 1) {
+      return reply.code(400).send({ error: "Некорректные данные запроса" });
+    }
+
+    const client = await app.pg.connect();
+    try {
+      // Получаем предложение и считаем доступные места
+      const offerResult = await client.query(
+        `SELECT
+           o.teacher_id,
+           o.discipline,
+           o.program,
+           (o.total_groups - COALESCE(SUM(b.groups_count), 0)) AS available_groups
+         FROM offers o
+         LEFT JOIN bookings b
+           ON b.teacher_id = o.teacher_id
+          AND b.discipline = o.discipline
+          AND b.active = true
+         WHERE o.id = $1 AND o.active = true
+         GROUP BY o.id`,
+        [offerId]
+      );
+
+      if (offerResult.rows.length === 0) {
+        return reply.code(404).send({ error: "Предложение не найдено или неактивно" });
+      }
+
+      const offer = offerResult.rows[0];
+      const available = Number(offer.available_groups);
+
+      if (groupsCount > available) {
+        return reply.code(409).send({
+          error: `Недостаточно свободных мест. Доступно: ${available}`,
+        });
+      }
+
+      // Создаём запись
+      const insertResult = await client.query(
+        `INSERT INTO bookings (student_id, teacher_id, discipline, groups_count, program, active)
+         VALUES ($1, $2, $3, $4, $5, true)
+         RETURNING id`,
+        [user.id, offer.teacher_id, offer.discipline, groupsCount, offer.program]
+      );
+
+      return reply.code(201).send({ bookingId: insertResult.rows[0].id });
+    } finally {
+      client.release();
+    }
+  }
+);
+
+// ─── Teacher directory ────────────────────────────────────────────────────────
+
+// GET /api/teachers — список всех преподавателей (для выпадающего списка)
+app.get(
+  "/api/teachers",
+  { preHandler: [app.authenticate] },
+  async (_request, _reply) => {
+    const client = await app.pg.connect();
+    try {
+      const result = await client.query(
+        `SELECT id, first_name, last_name, email
+         FROM users_new
+         WHERE role = 'teacher'
+         ORDER BY last_name, first_name`
+      );
+      return result.rows;
+    } finally {
+      client.release();
+    }
+  }
+);
+
+// ─── Manager endpoints ────────────────────────────────────────────────────────
+
+// GET /api/manager/offers — все активные предложения
+app.get(
+  "/api/manager/offers",
+  { preHandler: [app.authenticate] },
+  async (request, reply) => {
+    const user = request.user as { role: string };
+    if (user.role !== "manager") {
+      return reply.code(403).send({ error: "Forbidden" });
+    }
+    const client = await app.pg.connect();
+    try {
+      const result = await client.query(
+        `SELECT
+           o.id,
+           o.discipline,
+           o.faculty,
+           o.program,
+           o.total_groups,
+           o.modules,
+           u.id AS teacher_id,
+           u.first_name,
+           u.last_name,
+           u.email AS teacher_email
+         FROM offers o
+         JOIN users_new u ON o.teacher_id = u.id
+         WHERE o.active = true
+         ORDER BY o.created_at DESC`
+      );
+      return result.rows;
+    } finally {
+      client.release();
+    }
+  }
+);
+
+// POST /api/manager/offers — создать новое предложение
+app.post<{
+  Body: {
+    teacherId: number;
+    discipline: string;
+    faculty: string;
+    program: string;
+    totalGroups: number;
+    modules: number[];
+  };
+}>(
+  "/api/manager/offers",
+  { preHandler: [app.authenticate] },
+  async (request, reply) => {
+    const user = request.user as { role: string };
+    if (user.role !== "manager") {
+      return reply.code(403).send({ error: "Forbidden" });
+    }
+
+    const { teacherId, discipline, faculty, program, totalGroups, modules } = request.body;
+
+    if (!teacherId || !discipline || !program || !totalGroups || !modules?.length) {
+      return reply.code(400).send({ error: "Некорректные данные запроса" });
+    }
+
+    const client = await app.pg.connect();
+    try {
+      const result = await client.query(
+        `INSERT INTO offers (teacher_id, discipline, faculty, program, total_groups, modules)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING id`,
+        [teacherId, discipline, faculty ?? "", program, totalGroups, modules]
+      );
+      return reply.code(201).send({ id: result.rows[0].id });
+    } finally {
+      client.release();
+    }
+  }
+);
+
+// GET /api/manager/groups-stats — статистика групп по дисциплинам
+app.get(
+  "/api/manager/groups-stats",
+  { preHandler: [app.authenticate] },
+  async (request, reply) => {
+    const user = request.user as { role: string };
+    if (user.role !== "manager") {
+      return reply.code(403).send({ error: "Forbidden" });
+    }
+    const client = await app.pg.connect();
+    try {
+      const result = await client.query(
+        `SELECT
+           o.discipline,
+           SUM(o.total_groups) AS total_groups,
+           SUM(o.total_groups - COALESCE(b.booked, 0)) AS groups_without_assistant
+         FROM offers o
+         LEFT JOIN (
+           SELECT teacher_id, discipline, SUM(groups_count) AS booked
+           FROM bookings
+           WHERE active = true
+           GROUP BY teacher_id, discipline
+         ) b ON b.teacher_id = o.teacher_id AND b.discipline = o.discipline
+         WHERE o.active = true
+         GROUP BY o.discipline
+         ORDER BY o.discipline`
+      );
+      return result.rows;
+    } finally {
+      client.release();
+    }
+  }
+);
+
+// DELETE /api/manager/offers/:id — деактивировать предложение
+app.delete<{ Params: { id: string } }>(
+  "/api/manager/offers/:id",
+  { preHandler: [app.authenticate] },
+  async (request, reply) => {
+    const user = request.user as { role: string };
+    if (user.role !== "manager") {
+      return reply.code(403).send({ error: "Forbidden" });
+    }
+
+    const offerId = parseInt(request.params.id, 10);
+    if (isNaN(offerId)) {
+      return reply.code(400).send({ error: "Некорректный id" });
+    }
+
+    const client = await app.pg.connect();
+    try {
+      const result = await client.query(
+        `UPDATE offers SET active = false WHERE id = $1 RETURNING id`,
+        [offerId]
+      );
+      if (result.rowCount === 0) {
+        return reply.code(404).send({ error: "Предложение не найдено" });
+      }
+      return { success: true };
+    } finally {
+      client.release();
+    }
+  }
+);
+
 // Endpoint для выхода (logout)
 app.post(
   "/api/logout",
   { preHandler: [app.authenticate] },
-  async (request, reply) => {
+  async (request, _reply) => {
     try {
       // В случае JWT токенов, клиент должен удалить токен на своей стороне
       // Здесь мы можем добавить логирование выхода для аудита
@@ -239,7 +542,7 @@ app.post(
 );
 
 // Обработка ошибок
-app.setErrorHandler((error, request, reply) => {
+app.setErrorHandler((error, _request, reply) => {
   app.log.error(error);
 
   const errorMessage = error instanceof Error ? error.message : String(error);

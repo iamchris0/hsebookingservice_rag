@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Edit, Trash2, Users, BookOpen, GraduationCap, UsersRound } from "lucide-react"
@@ -10,8 +11,35 @@ export interface CourseCardProps {
 }
 
 export function CourseCard({ course, onEdit, onDelete }: CourseCardProps) {
-  
-    return (
+  const [confirmOpen, setConfirmOpen] = useState(false)
+
+  return (
+    <>
+      {confirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl">
+            <p className="text-base font-bold text-black m-4 text-center">
+              Вы уверены, что хотите удалить этот курс?
+            </p>
+            <p className="text-sm text-gray-500 mb-6 text-center">Это действие необратимо.</p>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                className="flex-1 rounded-full border-2 border-gray-300 text-black hover:bg-gray-50"
+                onClick={() => setConfirmOpen(false)}
+              >
+                Отмена
+              </Button>
+              <Button
+                className="flex-1 rounded-full bg-[#ff1ef7] hover:bg-[#e000dc] text-white border-0"
+                onClick={() => { onDelete(course.id); setConfirmOpen(false) }}
+              >
+                Удалить
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
       <Card className="bg-white shadow-sm hover:shadow-lg transition-shadow duration-300 border border-gray-100 rounded-2xl overflow-hidden flex flex-col">
         <CardHeader className="flex flex-row items-start justify-between space-y-0 p-4">
           <h2 className="text-base font-bold text-[#000000] min-h-[32px] leading-tight">
@@ -30,7 +58,7 @@ export function CourseCard({ course, onEdit, onDelete }: CourseCardProps) {
               variant="ghost"
               size="icon"
               className="h-7 w-7 text-[#ff1ef7] hover:text-[#ff1ef7] hover:bg-red-50"
-              onClick={() => onDelete(course.id)}
+              onClick={() => setConfirmOpen(true)}
             >
               <Trash2 className="h-3.5 w-3.5" />
             </Button>
@@ -129,5 +157,6 @@ export function CourseCard({ course, onEdit, onDelete }: CourseCardProps) {
           </Button>
         </CardFooter>
       </Card>
-    )
-  }
+    </>
+  )
+}

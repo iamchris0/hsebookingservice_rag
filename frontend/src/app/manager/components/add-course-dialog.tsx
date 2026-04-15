@@ -4,7 +4,9 @@ import React, { useState, useEffect, useRef } from "react"
 import { X, Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { CourseData, Discipline, LinkRow } from "../types"
+import { CourseData, Discipline, LinkRow, Teacher } from "../types"
+
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001"
 
 interface AddCourseDialogProps {
   isOpen: boolean
@@ -14,23 +16,10 @@ interface AddCourseDialogProps {
 }
 
 const disciplines: Discipline[] = [
-  "Data Analysis",
-  "Programming",
-  "Machine Learning",
-  "Mathematics",
-]
-
-const mockTeachers = [
-  "Prof. Ivanov A.S.",
-  "Prof. Smirnova E.V.",
-  "Prof. Kuznetsov M.I.",
-  "Prof. Volkov R.A.",
-  "Prof. Popova N.K.",
-  "Prof. Lebedev D.O.",
-  "Prof. Novikova I.P.",
-  "Prof. Fedorov V.G.",
-  "Prof. Morozova T.L.",
-  "Prof. Andreev S.N.",
+  "Анализ данных",
+  "Программирование",
+  "Машинное обучение",
+  "Цифровая грамотность",
 ]
 
 export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCourseDialogProps) {
@@ -39,7 +28,7 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
 
   // Form state
   const [selectedDiscipline, setSelectedDiscipline] = useState<Discipline | null>(null)
-  const [selectedTeacher, setSelectedTeacher] = useState("")
+  const [selectedTeacherId, setSelectedTeacherId] = useState<number | null>(null)
   const [isTeacherDropdownOpen, setIsTeacherDropdownOpen] = useState(false)
   const teacherRef = useRef<HTMLDivElement>(null)
   const [teacherSearch, setTeacherSearch] = useState("")
@@ -49,11 +38,32 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
   const [selectedModules, setSelectedModules] = useState<number[]>([])
   const [links, setLinks] = useState<LinkRow[]>([])
 
+  // Teachers loaded from API
+  const [teachers, setTeachers] = useState<Teacher[]>([])
+
+  useEffect(() => {
+    const fetchTeachers = async () => {
+      try {
+        const token = localStorage.getItem("token")
+        const response = await fetch(`${BACKEND_URL}/api/teachers`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (response.ok) {
+          const data: Teacher[] = await response.json()
+          setTeachers(data)
+        }
+      } catch {
+        // fail silently — user can still type manually
+      }
+    }
+    fetchTeachers()
+  }, [])
+
   useEffect(() => {
     if (isOpen) {
       if (editData) {
         setSelectedDiscipline(editData.discipline)
-        setSelectedTeacher(editData.teacherName)
+        setSelectedTeacherId(editData.teacherId)
         setTeacherSearch(editData.teacherName)
         setFaculty(editData.faculty)
         setProgram(editData.program)
@@ -70,7 +80,7 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
       const timeout = setTimeout(() => {
         setIsVisible(false)
         setSelectedDiscipline(null)
-        setSelectedTeacher("")
+        setSelectedTeacherId(null)
         setTeacherSearch("")
         setFaculty("")
         setProgram("")
@@ -119,21 +129,25 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
     )
   }
 
-  const filteredTeachers = mockTeachers.filter((t) =>
-    t.toLowerCase().includes(teacherSearch.toLowerCase()),
-  )
+  const filteredTeachers = teachers.filter((t) => {
+    const fullName = `${t.last_name} ${t.first_name}`
+    return fullName.toLowerCase().includes(teacherSearch.toLowerCase()) ||
+      t.email.toLowerCase().includes(teacherSearch.toLowerCase())
+  })
 
-  const handleSelectTeacher = (teacher: string) => {
-    setSelectedTeacher(teacher)
-    setTeacherSearch(teacher)
+  const handleSelectTeacher = (teacher: Teacher) => {
+    const fullName = `${teacher.last_name} ${teacher.first_name}`
+    setSelectedTeacherId(teacher.id)
+    setTeacherSearch(fullName)
     setIsTeacherDropdownOpen(false)
   }
 
   const handleConfirm = () => {
-    if (!selectedDiscipline) return
+    if (!selectedDiscipline || selectedTeacherId === null) return
     onSubmit({
+      teacherId: selectedTeacherId,
       discipline: selectedDiscipline,
-      teacherName: selectedTeacher,
+      teacherName: teacherSearch,
       faculty,
       program,
       numberOfGroups: parseInt(numberOfGroups) || 1,
@@ -142,6 +156,14 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
     })
     onClose()
   }
+
+  const isConfirmDisabled =
+    !selectedDiscipline ||
+    selectedTeacherId === null ||
+    !faculty ||
+    !program ||
+    !numberOfGroups ||
+    selectedModules.length === 0
 
   if (!isVisible) return null
 
@@ -204,11 +226,11 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
           <div className="mb-3 relative" ref={teacherRef}>
             <label className="block font-bold text-[#2300fa] text-sm mb-1.5">Teacher</label>
             <Input
-              placeholder="Search teacher..."
+              placeholder="Search or type teacher name..."
               value={teacherSearch}
               onChange={(e) => {
                 setTeacherSearch(e.target.value)
-                setSelectedTeacher(e.target.value)
+                setSelectedTeacherId(null)
                 setIsTeacherDropdownOpen(true)
               }}
               onFocus={() => setIsTeacherDropdownOpen(true)}
@@ -217,17 +239,21 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
             {isTeacherDropdownOpen && (
               <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-36 overflow-y-auto">
                 {filteredTeachers.length > 0 ? (
-                  filteredTeachers.map((teacher) => (
-                    <button
-                      key={teacher}
-                      onClick={() => handleSelectTeacher(teacher)}
-                      className={`w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 transition-colors ${
-                        selectedTeacher === teacher ? "bg-gray-100 font-medium" : ""
-                      }`}
-                    >
-                      {teacher}
-                    </button>
-                  ))
+                  filteredTeachers.map((teacher) => {
+                    const fullName = `${teacher.last_name} ${teacher.first_name}`
+                    return (
+                      <button
+                        key={teacher.id}
+                        onClick={() => handleSelectTeacher(teacher)}
+                        className={`w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 transition-colors ${
+                          selectedTeacherId === teacher.id ? "bg-gray-100 font-medium" : ""
+                        }`}
+                      >
+                        <span>{fullName}</span>
+                        <span className="text-xs text-gray-400 ml-2">{teacher.email}</span>
+                      </button>
+                    )
+                  })
                 ) : (
                   <div className="px-3 py-1.5 text-sm text-gray-400">No teachers found</div>
                 )}
@@ -350,14 +376,7 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
           {/* Confirm Button */}
           <Button
             onClick={handleConfirm}
-            disabled={
-              !selectedDiscipline ||
-              !selectedTeacher ||
-              !faculty ||
-              !program ||
-              !numberOfGroups ||
-              selectedModules.length === 0
-            }
+            disabled={isConfirmDisabled}
             className="w-full h-10 rounded-full bg-[#DCFF05] hover:bg-[#c9eb00] text-black font-medium border-2 border-black disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {editData ? "Save Changes" : "Confirm"}

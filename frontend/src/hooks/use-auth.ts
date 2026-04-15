@@ -7,8 +7,11 @@ import { useRouter } from 'next/navigation';
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
 
 interface User {
+  id: number;
   email: string;
   role: string;
+  firstName?: string;
+  lastName?: string;
 }
 
 export function useAuth(requiredRole?: string | string[]) {

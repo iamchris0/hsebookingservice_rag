@@ -1,23 +1,21 @@
 "use client"
 
-import { useState, useEffect } from "react"
-
+import { useState } from "react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
-
 import { Mail, BookOpen, GraduationCap, Users } from "lucide-react"
-import { CourseCardProps } from "../types"
-import { SelectCourseDialog } from './select-course-dialog'
+import { SearchCourseCardProps } from "../types"
+import { SelectCourseDialog } from "./select-course-dialog"
 import { Button } from "@/components/ui/button"
 
 export function CourseCard({
+  id,
   discipline,
   teacherName,
   email,
   program,
-  numberOfGroups,
-  duration
-}: CourseCardProps) {
-
+  availableGroups,
+  modules,
+}: SearchCourseCardProps) {
   const [isSelected, setIsSelected] = useState(false)
 
   return (
@@ -37,9 +35,7 @@ export function CourseCard({
             <GraduationCap className="h-4 w-4 text-black" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs mb-0.5" style={{ color: "#2300fa" }}>
-              Discipline
-            </p>
+            <p className="text-xs mb-0.5" style={{ color: "#2300fa" }}>Discipline</p>
             <p className="text-xs text-black leading-tight line-clamp-2">{discipline}</p>
           </div>
         </div>
@@ -52,9 +48,7 @@ export function CourseCard({
             <Mail className="h-4 w-4 text-black" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs mb-0.5" style={{ color: "#2300fa" }}>
-              Contacts
-            </p>
+            <p className="text-xs mb-0.5" style={{ color: "#2300fa" }}>Contacts</p>
             <p className="text-xs text-black leading-tight line-clamp-2">{email}</p>
           </div>
         </div>
@@ -67,9 +61,7 @@ export function CourseCard({
             <BookOpen className="h-4 w-4 text-black" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs mb-0.5" style={{ color: "#2300fa" }}>
-              Program
-            </p>
+            <p className="text-xs mb-0.5" style={{ color: "#2300fa" }}>Program</p>
             <p className="text-xs font-medium text-black leading-tight line-clamp-2">{program}</p>
           </div>
         </div>
@@ -82,25 +74,21 @@ export function CourseCard({
             <Users className="h-4 w-4 text-black" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs mb-0.5" style={{ color: "#2300fa" }}>
-              Кол-во свободных групп
-            </p>
-            <p className="text-xs font-medium text-black capitalize leading-tight">{numberOfGroups}</p>
+            <p className="text-xs mb-0.5" style={{ color: "#2300fa" }}>Кол-во свободных групп</p>
+            <p className="text-xs font-medium text-black capitalize leading-tight">{availableGroups}</p>
           </div>
         </div>
 
         <div>
-          <p className="text-xs mb-2" style={{ color: "#2300fa" }}>
-            Duration
-          </p>
+          <p className="text-xs mb-2" style={{ color: "#2300fa" }}>Учебные модули</p>
           <div className="flex">
             {[1, 2, 3, 4].map((moduleNum, index) => (
               <div
                 key={moduleNum}
                 className={`flex-1 h-9 flex items-center justify-center text-sm font-semibold transition-all ${
-                  duration.includes(moduleNum) ? "bg-black shadow-md" : "bg-gray-200 text-gray-400"
+                  modules.includes(moduleNum) ? "bg-black shadow-md" : "bg-gray-200 text-gray-400"
                 } ${index === 0 ? "rounded-l-full" : ""} ${index === 3 ? "rounded-r-full" : ""}`}
-                style={duration.includes(moduleNum) ? { color: "#DCFF05" } : {}}
+                style={modules.includes(moduleNum) ? { color: "#DCFF05" } : {}}
               >
                 {moduleNum}
               </div>
@@ -108,10 +96,9 @@ export function CourseCard({
           </div>
         </div>
 
-        {/* Buttons */}
         <div className="flex gap-2 mt-4">
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             className="flex-1 rounded-full border-[#000000] bg-[#DCFF05] hover:bg-[#c9eb00] text-black text-sm h-9"
             onClick={() => setIsSelected(true)}
           >
@@ -122,10 +109,11 @@ export function CourseCard({
         <SelectCourseDialog
           isOpen={isSelected}
           onClose={() => setIsSelected(false)}
+          offerId={id}
           teacherName={teacherName}
           discipline={discipline}
           program={program}
-          numberOfGroups={numberOfGroups}
+          availableGroups={availableGroups}
         />
       </CardContent>
     </Card>
