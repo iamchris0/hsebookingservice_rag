@@ -3,6 +3,7 @@ import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Edit, Trash2, Users, BookOpen, GraduationCap, UsersRound } from "lucide-react"
 import { Course } from "../types"
+import { CourseDetailsDialog } from "./course-details-dialog"
 
 export interface CourseCardProps {
   course: Course
@@ -12,6 +13,7 @@ export interface CourseCardProps {
 
 export function CourseCard({ course, onEdit, onDelete }: CourseCardProps) {
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [detailsOpen, setDetailsOpen] = useState(false)
 
   return (
     <>
@@ -152,11 +154,17 @@ export function CourseCard({ course, onEdit, onDelete }: CourseCardProps) {
           <Button
             variant="outline"
             className="w-full h-10 text-sm font-medium bg-transparent border-2 border-blue-600 text-black hover:bg-blue-600 hover:text-white rounded-full transition-colors"
+            onClick={() => setDetailsOpen(true)}
           >
             More Details
           </Button>
         </CardFooter>
       </Card>
+      <CourseDetailsDialog
+        course={course}
+        isOpen={detailsOpen}
+        onClose={() => setDetailsOpen(false)}
+      />
     </>
   )
 }

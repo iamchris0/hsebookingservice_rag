@@ -72,9 +72,8 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
         setLinks(editData.links || [])
       }
       setIsVisible(true)
-      requestAnimationFrame(() => {
-        setIsAnimating(true)
-      })
+      const t = setTimeout(() => setIsAnimating(true), 50)
+      return () => clearTimeout(t)
     } else {
       setIsAnimating(false)
       const timeout = setTimeout(() => {
