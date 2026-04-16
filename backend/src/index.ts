@@ -515,6 +515,7 @@ app.get(
              SELECT json_agg(json_build_object(
                'booking_id', b.id,
                'groups_count', b.groups_count,
+               'assistance_format', b.assistance_format,
                'student_first_name', s.first_name,
                'student_last_name', s.last_name,
                'student_email', s.email

@@ -76,10 +76,13 @@ export function MyGroupsSection() {
                     key={offer.id}
                     offerId={String(offer.id)}
                     discipline={offer.discipline}
+                    faculty={offer.faculty}
                     program={offer.program}
                     modules={offer.modules}
+                    groupsCount={offer.total_groups}
+                    managerFirstName={offer.manager_first_name}
+                    managerLastName={offer.manager_last_name}
                     hideAssistantName={true}
-                    hideMoreDetails={true}
                   />
                 ))}
               </div>
@@ -101,11 +104,14 @@ export function MyGroupsSection() {
                     key={booking.booking_id}
                     offerId={String(offer.id)}
                     discipline={offer.discipline}
+                    faculty={offer.faculty}
                     program={offer.program}
                     modules={offer.modules}
+                    groupsCount={booking.groups_count}
                     studentFirstName={booking.student_first_name}
                     studentLastName={booking.student_last_name}
                     studentEmail={booking.student_email}
+                    assistanceFormat={booking.assistance_format}
                     onMoreDetails={() => setSelectedItem({ offer, booking })}
                   />
                 ))}
