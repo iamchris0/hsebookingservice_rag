@@ -37,8 +37,7 @@ export interface DisciplineStat {
 
 export interface TeacherBooking {
   booking_id: number
-  groups_count: number
-  assistance_format: "money" | "credits" | null
+  payment_type: "money" | "credits"
   student_first_name: string
   student_last_name: string
   student_email: string

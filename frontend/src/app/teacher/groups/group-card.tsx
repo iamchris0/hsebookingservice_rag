@@ -17,7 +17,7 @@ interface GroupCardProps {
   studentLastName?: string
   studentEmail?: string
   studentTelegram?: string
-  assistanceFormat?: "money" | "credits" | null
+  paymentType?: "money" | "credits" | null
   hideAssistantName?: boolean
   onMoreDetails?: () => void
   onSelectAssistant?: () => void
@@ -108,10 +108,10 @@ function NoAssistantCard({ discipline, faculty, program, modules, groupsCount, m
 function MyGroupCard({
   discipline, faculty, program, modules, groupsCount,
   studentFirstName, studentLastName, studentEmail, studentTelegram,
-  assistanceFormat, onMoreDetails,
+  paymentType, onMoreDetails,
 }: GroupCardProps) {
-  const isMoney = assistanceFormat === "money"
-  const isCredits = assistanceFormat === "credits"
+  const isMoney = paymentType === "money"
+  const isCredits = paymentType === "credits"
 
   return (
     <Card className="bg-white shadow-sm hover:shadow-lg transition-shadow duration-300 border border-gray-100 rounded-2xl overflow-hidden flex flex-col">

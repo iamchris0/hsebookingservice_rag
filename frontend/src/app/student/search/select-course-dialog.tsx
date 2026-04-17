@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { CheckCircle2, Minus, Plus } from "lucide-react"
+import { CheckCircle2, DollarSign, CreditCard } from "lucide-react"
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001"
 
@@ -14,7 +14,6 @@ interface SelectCourseDialogProps {
   teacherName: string
   discipline: string
   program: string
-  availableGroups: number
 }
 
 export function SelectCourseDialog({
@@ -24,10 +23,8 @@ export function SelectCourseDialog({
   teacherName,
   discipline,
   program,
-  availableGroups,
 }: SelectCourseDialogProps) {
-  const maxGroups = Math.min(availableGroups, 4)
-  const [selectedGroups, setSelectedGroups] = useState(1)
+  const [paymentType, setPaymentType] = useState<"money" | "credits">("money")
   const [confirmed, setConfirmed] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -37,18 +34,10 @@ export function SelectCourseDialog({
       onClose()
       setTimeout(() => {
         setConfirmed(false)
-        setSelectedGroups(1)
+        setPaymentType("money")
         setSubmitError(null)
       }, 300)
     }
-  }
-
-  function decrement() {
-    setSelectedGroups((v) => Math.max(1, v - 1))
-  }
-
-  function increment() {
-    setSelectedGroups((v) => Math.min(maxGroups, v + 1))
   }
 
   async function handleConfirm() {
@@ -62,7 +51,7 @@ export function SelectCourseDialog({
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ offerId, groupsCount: selectedGroups }),
+        body: JSON.stringify({ offerId, paymentType }),
       })
 
       if (!response.ok) {
@@ -86,28 +75,31 @@ export function SelectCourseDialog({
           <div className="flex flex-col gap-6">
             <DialogTitle className="text-lg font-bold text-black">Подтверждение заявки</DialogTitle>
 
-            {/* Group counter */}
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-gray-800">
-                Выберите количество групп (<span className="font-semibold">{maxGroups}</span> доступно):
-              </p>
-              <div className="flex items-center rounded-full overflow-hidden border-2 border-black">
+            {/* Payment type selector */}
+            <div>
+              <p className="text-sm text-gray-600 mb-3">Выберите формат оплаты:</p>
+              <div className="flex gap-3">
                 <button
-                  onClick={decrement}
-                  disabled={selectedGroups <= 1}
-                  className="w-9 h-9 flex items-center justify-center bg-white disabled:opacity-40 hover:bg-gray-100 transition-colors"
+                  onClick={() => setPaymentType("money")}
+                  className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl border-2 transition-all ${
+                    paymentType === "money"
+                      ? "border-black bg-black text-white"
+                      : "border-gray-200 bg-white text-black hover:border-gray-400"
+                  }`}
                 >
-                  <Minus className="w-3.5 h-3.5" />
+                  <DollarSign className="w-4 h-4" />
+                  <span className="text-sm font-medium">Деньги</span>
                 </button>
-                <span className="w-10 h-9 flex items-center justify-center text-black font-bold text-sm select-none">
-                  {selectedGroups}
-                </span>
                 <button
-                  onClick={increment}
-                  disabled={selectedGroups >= maxGroups}
-                  className="w-9 h-9 flex items-center justify-center bg-white disabled:opacity-40 hover:bg-gray-100 transition-colors"
+                  onClick={() => setPaymentType("credits")}
+                  className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl border-2 transition-all ${
+                    paymentType === "credits"
+                      ? "border-black bg-black text-white"
+                      : "border-gray-200 bg-white text-black hover:border-gray-400"
+                  }`}
                 >
-                  <Plus className="w-3.5 h-3.5" />
+                  <CreditCard className="w-4 h-4" />
+                  <span className="text-sm font-medium">Кредиты</span>
                 </button>
               </div>
             </div>
@@ -115,12 +107,13 @@ export function SelectCourseDialog({
             <hr className="border-t-2 border-gray-200" />
 
             <p className="text-md text-gray-800 leading-relaxed text-justify">
-              Вы собираетесь записаться на обучение в{" "}
-              <span className="font-semibold text-black">{selectedGroups}</span>{" "}
-              групп{selectedGroups !== 1 ? "ы" : "у"}{" "}
+              Вы собираетесь записаться на{" "}
               <span className="font-semibold text-black">{discipline}</span> на
               ОП <span className="font-semibold text-black">{program}</span> под руководством{" "}
               <span className="font-semibold text-black">{teacherName}</span>.<br /><br />
+              Формат оплаты: <span className="font-semibold text-black">
+                {paymentType === "money" ? "деньги" : "кредиты"}
+              </span>.<br /><br />
               Если вы подтверждаете информацию, нажмите кнопку ниже, чтобы
               отправить уведомление преподавателю.
             </p>

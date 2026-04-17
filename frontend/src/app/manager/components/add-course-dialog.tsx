@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from "react"
 import { X, Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { CourseData, Discipline, LinkRow, Teacher } from "../types"
+import { CourseData, DisciplineOption, FacultyOption, LinkRow, ModuleOption, ProgramOption, Teacher } from "../types"
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001"
 
@@ -15,60 +15,66 @@ interface AddCourseDialogProps {
   editData?: CourseData | null
 }
 
-const disciplines: Discipline[] = [
-  "Анализ данных",
-  "Программирование",
-  "Машинное обучение",
-  "Цифровая грамотность",
-]
-
 export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCourseDialogProps) {
   const [isVisible, setIsVisible] = useState(false)
   const [isAnimating, setIsAnimating] = useState(false)
 
   // Form state
-  const [selectedDiscipline, setSelectedDiscipline] = useState<Discipline | null>(null)
+  const [selectedDisciplineId, setSelectedDisciplineId] = useState<number | null>(null)
   const [selectedTeacherId, setSelectedTeacherId] = useState<number | null>(null)
-  const [isTeacherDropdownOpen, setIsTeacherDropdownOpen] = useState(false)
-  const teacherRef = useRef<HTMLDivElement>(null)
   const [teacherSearch, setTeacherSearch] = useState("")
-  const [faculty, setFaculty] = useState("")
-  const [program, setProgram] = useState("")
+  const [facultyValue, setFacultyValue] = useState("")
+  const [programValue, setProgramValue] = useState("")
   const [numberOfGroups, setNumberOfGroups] = useState("")
-  const [selectedModules, setSelectedModules] = useState<number[]>([])
+  const [selectedModuleIds, setSelectedModuleIds] = useState<number[]>([])
   const [links, setLinks] = useState<LinkRow[]>([])
 
-  // Teachers loaded from API
+  // Dropdown open state
+  const [isTeacherDropdownOpen, setIsTeacherDropdownOpen] = useState(false)
+  const [isFacultyDropdownOpen, setIsFacultyDropdownOpen] = useState(false)
+  const [isProgramDropdownOpen, setIsProgramDropdownOpen] = useState(false)
+
+  // Refs for click-outside
+  const teacherRef = useRef<HTMLDivElement>(null)
+  const facultyRef = useRef<HTMLDivElement>(null)
+  const programRef = useRef<HTMLDivElement>(null)
+
+  // Data from API
   const [teachers, setTeachers] = useState<Teacher[]>([])
+  const [disciplines, setDisciplines] = useState<DisciplineOption[]>([])
+  const [faculties, setFaculties] = useState<FacultyOption[]>([])
+  const [programs, setPrograms] = useState<ProgramOption[]>([])
+  const [modules, setModules] = useState<ModuleOption[]>([])
 
   useEffect(() => {
-    const fetchTeachers = async () => {
-      try {
-        const token = localStorage.getItem("token")
-        const response = await fetch(`${BACKEND_URL}/api/teachers`, {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-        if (response.ok) {
-          const data: Teacher[] = await response.json()
-          setTeachers(data)
-        }
-      } catch {
-        // fail silently — user can still type manually
-      }
-    }
-    fetchTeachers()
+    const token = localStorage.getItem("token")
+    const headers = { Authorization: `Bearer ${token}` }
+
+    Promise.all([
+      fetch(`${BACKEND_URL}/api/teachers`, { headers }).then((r) => r.ok ? r.json() : []),
+      fetch(`${BACKEND_URL}/api/disciplines`, { headers }).then((r) => r.ok ? r.json() : []),
+      fetch(`${BACKEND_URL}/api/faculties`, { headers }).then((r) => r.ok ? r.json() : []),
+      fetch(`${BACKEND_URL}/api/programs`, { headers }).then((r) => r.ok ? r.json() : []),
+      fetch(`${BACKEND_URL}/api/modules`, { headers }).then((r) => r.ok ? r.json() : []),
+    ]).then(([t, d, f, p, m]) => {
+      setTeachers(t)
+      setDisciplines(d)
+      setFaculties(f)
+      setPrograms(p)
+      setModules(m)
+    }).catch(() => {})
   }, [])
 
   useEffect(() => {
     if (isOpen) {
       if (editData) {
-        setSelectedDiscipline(editData.discipline)
+        setSelectedDisciplineId(editData.disciplineId)
         setSelectedTeacherId(editData.teacherId)
         setTeacherSearch(editData.teacherName)
-        setFaculty(editData.faculty)
-        setProgram(editData.program)
+        setFacultyValue(editData.faculty)
+        setProgramValue(editData.program)
         setNumberOfGroups(String(editData.numberOfGroups))
-        setSelectedModules(editData.duration)
+        setSelectedModuleIds(editData.moduleIds)
         setLinks(editData.links || [])
       }
       setIsVisible(true)
@@ -78,15 +84,17 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
       setIsAnimating(false)
       const timeout = setTimeout(() => {
         setIsVisible(false)
-        setSelectedDiscipline(null)
+        setSelectedDisciplineId(null)
         setSelectedTeacherId(null)
         setTeacherSearch("")
-        setFaculty("")
-        setProgram("")
+        setFacultyValue("")
+        setProgramValue("")
         setNumberOfGroups("")
-        setSelectedModules([])
+        setSelectedModuleIds([])
         setLinks([])
         setIsTeacherDropdownOpen(false)
+        setIsFacultyDropdownOpen(false)
+        setIsProgramDropdownOpen(false)
       }, 300)
       return () => clearTimeout(timeout)
     }
@@ -94,75 +102,109 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (teacherRef.current && !teacherRef.current.contains(e.target as Node)) {
+      if (teacherRef.current && !teacherRef.current.contains(e.target as Node))
         setIsTeacherDropdownOpen(false)
-      }
+      if (facultyRef.current && !facultyRef.current.contains(e.target as Node))
+        setIsFacultyDropdownOpen(false)
+      if (programRef.current && !programRef.current.contains(e.target as Node))
+        setIsProgramDropdownOpen(false)
     }
     document.addEventListener("mousedown", handleClickOutside)
     return () => document.removeEventListener("mousedown", handleClickOutside)
   }, [])
 
   const handleBackdropClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) {
-      onClose()
-    }
+    if (e.target === e.currentTarget) onClose()
   }
 
-  const toggleModule = (module: number) => {
-    setSelectedModules((prev) =>
-      prev.includes(module) ? prev.filter((m) => m !== module) : [...prev, module],
+  const toggleModule = (moduleId: number) =>
+    setSelectedModuleIds((prev) =>
+      prev.includes(moduleId) ? prev.filter((id) => id !== moduleId) : [...prev, moduleId]
     )
-  }
 
-  const addLinkRow = () => {
-    setLinks((prev) => [...prev, { name: "", url: "" }])
-  }
+  const addLinkRow = () => setLinks((prev) => [...prev, { name: "", url: "" }])
+  const removeLinkRow = (index: number) => setLinks((prev) => prev.filter((_, i) => i !== index))
+  const updateLink = (index: number, field: "name" | "url", value: string) =>
+    setLinks((prev) => prev.map((link, i) => (i === index ? { ...link, [field]: value } : link)))
 
-  const removeLinkRow = (index: number) => {
-    setLinks((prev) => prev.filter((_, i) => i !== index))
-  }
-
-  const updateLink = (index: number, field: "name" | "url", value: string) => {
-    setLinks((prev) =>
-      prev.map((link, i) => (i === index ? { ...link, [field]: value } : link)),
-    )
-  }
-
+  // Filtered suggestions
   const filteredTeachers = teachers.filter((t) => {
     const fullName = `${t.last_name} ${t.first_name}`
-    return fullName.toLowerCase().includes(teacherSearch.toLowerCase()) ||
+    return (
+      fullName.toLowerCase().includes(teacherSearch.toLowerCase()) ||
       t.email.toLowerCase().includes(teacherSearch.toLowerCase())
+    )
+  })
+
+  const filteredFaculties = faculties.filter((f) =>
+    f.name.toLowerCase().includes(facultyValue.toLowerCase())
+  )
+
+  // Programs filtered by currently typed faculty (if matches an existing one exactly) or all
+  const filteredPrograms = programs.filter((p) => {
+    const matchesFaculty = facultyValue.trim() === ""
+      || p.faculty_name.toLowerCase().includes(facultyValue.toLowerCase())
+    return matchesFaculty && p.name.toLowerCase().includes(programValue.toLowerCase())
   })
 
   const handleSelectTeacher = (teacher: Teacher) => {
-    const fullName = `${teacher.last_name} ${teacher.first_name}`
     setSelectedTeacherId(teacher.id)
-    setTeacherSearch(fullName)
+    setTeacherSearch(`${teacher.last_name} ${teacher.first_name}`)
     setIsTeacherDropdownOpen(false)
   }
 
+  const handleSelectFaculty = (faculty: FacultyOption) => {
+    setFacultyValue(faculty.name)
+    setIsFacultyDropdownOpen(false)
+    // Clear program if it no longer belongs to this faculty
+    const stillValid = programs.some(
+      (p) => p.faculty_name === faculty.name && p.name === programValue
+    )
+    if (!stillValid) setProgramValue("")
+  }
+
+  const handleSelectProgram = (program: ProgramOption) => {
+    setProgramValue(program.name)
+    // Auto-fill faculty if empty or different
+    if (!facultyValue.trim() || facultyValue !== program.faculty_name) {
+      setFacultyValue(program.faculty_name)
+    }
+    setIsProgramDropdownOpen(false)
+  }
+
+  const selectedDiscipline = disciplines.find((d) => d.id === selectedDisciplineId)
+
   const handleConfirm = () => {
-    if (!selectedDiscipline || selectedTeacherId === null) return
+    if (!selectedDisciplineId || !selectedDiscipline) return
+    if (!facultyValue.trim() || !programValue.trim()) return
+    if (selectedTeacherId === null) return
+
+    const selectedModuleNumbers = modules
+      .filter((m) => selectedModuleIds.includes(m.id))
+      .map((m) => m.number)
+
     onSubmit({
       teacherId: selectedTeacherId,
-      discipline: selectedDiscipline,
+      disciplineId: selectedDisciplineId,
+      discipline: selectedDiscipline.name,
       teacherName: teacherSearch,
-      faculty,
-      program,
+      faculty: facultyValue.trim(),
+      program: programValue.trim(),
       numberOfGroups: parseInt(numberOfGroups) || 1,
-      duration: selectedModules,
+      duration: selectedModuleNumbers,
+      moduleIds: selectedModuleIds,
       links,
     })
     onClose()
   }
 
   const isConfirmDisabled =
-    !selectedDiscipline ||
+    !selectedDisciplineId ||
     selectedTeacherId === null ||
-    !faculty ||
-    !program ||
+    !facultyValue.trim() ||
+    !programValue.trim() ||
     !numberOfGroups ||
-    selectedModules.length === 0
+    selectedModuleIds.length === 0
 
   if (!isVisible) return null
 
@@ -182,10 +224,7 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
         <div className="px-4 pt-3 pb-2">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-[#2300fa]">{editData ? "Edit Course" : "Add New Course"}</h2>
-            <button
-              onClick={onClose}
-              className="p-1 hover:bg-gray-100 rounded-full transition-colors"
-            >
+            <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-full transition-colors">
               <X className="w-5 h-5 text-[#2300fa]" />
             </button>
           </div>
@@ -194,34 +233,34 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
 
         {/* Content */}
         <div className="px-4 pb-4 max-h-[80vh] overflow-y-auto">
-          {/* 1. Discipline Selection */}
+
+          {/* 1. Discipline */}
           <div className="mb-3">
             <h3 className="font-bold text-[#2300fa] text-sm mb-2">Discipline</h3>
             <div className="grid grid-cols-2 gap-2">
               {disciplines.map((discipline) => (
                 <label
-                  key={discipline}
+                  key={discipline.id}
                   className="flex items-center gap-2 p-2.5 rounded-lg border-2 cursor-pointer transition-all hover:shadow-md"
                   style={{
-                    borderColor: selectedDiscipline === discipline ? '#2300fa' : '#e5e5e5',
-                    backgroundColor: selectedDiscipline === discipline ? '#f0f0ff' : '#ffffff'
+                    borderColor: selectedDisciplineId === discipline.id ? "#2300fa" : "#e5e5e5",
+                    backgroundColor: selectedDisciplineId === discipline.id ? "#f0f0ff" : "#ffffff",
                   }}
                 >
                   <input
                     type="radio"
                     name="discipline"
-                    value={discipline}
-                    checked={selectedDiscipline === discipline}
-                    onChange={(e) => setSelectedDiscipline(e.target.value as Discipline)}
+                    checked={selectedDisciplineId === discipline.id}
+                    onChange={() => setSelectedDisciplineId(discipline.id)}
                     className="w-4 h-4 accent-[#2300fa]"
                   />
-                  <span className="text-sm" style={{ color: '#000000' }}>{discipline}</span>
+                  <span className="text-sm text-black">{discipline.name}</span>
                 </label>
               ))}
             </div>
           </div>
 
-          {/* 2. Teacher Dropdown */}
+          {/* 2. Teacher */}
           <div className="mb-3 relative" ref={teacherRef}>
             <label className="block font-bold text-[#2300fa] text-sm mb-1.5">Teacher</label>
             <Input
@@ -235,60 +274,88 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
               onFocus={() => setIsTeacherDropdownOpen(true)}
               className="bg-gray-100 border-none rounded-lg h-9 text-sm"
             />
-            {isTeacherDropdownOpen && (
+            {isTeacherDropdownOpen && filteredTeachers.length > 0 && (
               <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-36 overflow-y-auto">
-                {filteredTeachers.length > 0 ? (
-                  filteredTeachers.map((teacher) => {
-                    const fullName = `${teacher.last_name} ${teacher.first_name}`
-                    return (
-                      <button
-                        key={teacher.id}
-                        onClick={() => handleSelectTeacher(teacher)}
-                        className={`w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 transition-colors ${
-                          selectedTeacherId === teacher.id ? "bg-gray-100 font-medium" : ""
-                        }`}
-                      >
-                        <span>{fullName}</span>
-                        <span className="text-xs text-gray-400 ml-2">{teacher.email}</span>
-                      </button>
-                    )
-                  })
-                ) : (
-                  <div className="px-3 py-1.5 text-sm text-gray-400">No teachers found</div>
-                )}
+                {filteredTeachers.map((teacher) => (
+                  <button
+                    key={teacher.id}
+                    onClick={() => handleSelectTeacher(teacher)}
+                    className={`w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 transition-colors ${
+                      selectedTeacherId === teacher.id ? "bg-gray-100 font-medium" : ""
+                    }`}
+                  >
+                    <span>{teacher.last_name} {teacher.first_name}</span>
+                    <span className="text-xs text-gray-400 ml-2">{teacher.email}</span>
+                  </button>
+                ))}
               </div>
             )}
           </div>
 
-          {/* 3. Faculty */}
-          <div className="mb-3">
+          {/* 3. Faculty — free-text with suggestions */}
+          <div className="mb-3 relative" ref={facultyRef}>
             <label className="block font-bold text-[#2300fa] text-sm mb-1.5">Faculty</label>
             <Input
-              placeholder="Enter faculty name"
-              value={faculty}
-              onChange={(e) => setFaculty(e.target.value)}
+              placeholder="Type or select faculty..."
+              value={facultyValue}
+              onChange={(e) => {
+                setFacultyValue(e.target.value)
+                setIsFacultyDropdownOpen(true)
+              }}
+              onFocus={() => setIsFacultyDropdownOpen(true)}
               className="bg-gray-100 border-none rounded-lg h-9 text-sm"
             />
+            {isFacultyDropdownOpen && filteredFaculties.length > 0 && (
+              <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-36 overflow-y-auto">
+                {filteredFaculties.map((faculty) => (
+                  <button
+                    key={faculty.id}
+                    onClick={() => handleSelectFaculty(faculty)}
+                    className={`w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 transition-colors ${
+                      facultyValue === faculty.name ? "bg-gray-100 font-medium" : ""
+                    }`}
+                  >
+                    {faculty.name}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* 4. Educational Program */}
-          <div className="mb-3">
-            <label className="block font-bold text-[#2300fa] text-sm mb-1.5">
-              Educational Program
-            </label>
+          {/* 4. Program — free-text with suggestions filtered by faculty */}
+          <div className="mb-3 relative" ref={programRef}>
+            <label className="block font-bold text-[#2300fa] text-sm mb-1.5">Educational Program</label>
             <Input
-              placeholder="Enter educational program"
-              value={program}
-              onChange={(e) => setProgram(e.target.value)}
+              placeholder="Type or select program..."
+              value={programValue}
+              onChange={(e) => {
+                setProgramValue(e.target.value)
+                setIsProgramDropdownOpen(true)
+              }}
+              onFocus={() => setIsProgramDropdownOpen(true)}
               className="bg-gray-100 border-none rounded-lg h-9 text-sm"
             />
+            {isProgramDropdownOpen && filteredPrograms.length > 0 && (
+              <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-36 overflow-y-auto">
+                {filteredPrograms.map((program) => (
+                  <button
+                    key={program.id}
+                    onClick={() => handleSelectProgram(program)}
+                    className={`w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 transition-colors ${
+                      programValue === program.name ? "bg-gray-100 font-medium" : ""
+                    }`}
+                  >
+                    <span>{program.name}</span>
+                    <span className="text-xs text-gray-400 ml-2">{program.faculty_name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* 5. Number of Groups */}
           <div className="mb-3">
-            <label className="block font-bold text-[#2300fa] text-sm mb-1.5">
-              Number of Groups
-            </label>
+            <label className="block font-bold text-[#2300fa] text-sm mb-1.5">Number of Groups</label>
             <Input
               type="number"
               min="1"
@@ -301,21 +368,19 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
 
           {/* 6. Course Duration (Modules) */}
           <div className="mb-3">
-            <label className="block font-bold text-[#2300fa] text-sm mb-1.5">
-              Course Duration (modules)
-            </label>
+            <label className="block font-bold text-[#2300fa] text-sm mb-1.5">Course Duration (modules)</label>
             <div className="flex gap-2">
-              {[1, 2, 3, 4].map((module) => (
+              {modules.map((module) => (
                 <button
-                  key={module}
-                  onClick={() => toggleModule(module)}
+                  key={module.id}
+                  onClick={() => toggleModule(module.id)}
                   className={`flex-1 py-2 px-4 text-center text-sm font-medium rounded-md border transition-colors ${
-                    selectedModules.includes(module)
+                    selectedModuleIds.includes(module.id)
                       ? "bg-[#2300fa] text-white border-[#2300fa]"
                       : "bg-white text-black border-gray-200 hover:border-gray-300"
                   }`}
                 >
-                  {module}
+                  {module.number}
                 </button>
               ))}
             </div>
@@ -333,7 +398,6 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
                 Add link
               </button>
             </div>
-
             {links.length === 0 ? (
               <p className="text-xs text-gray-400 italic">No links added yet</p>
             ) : (

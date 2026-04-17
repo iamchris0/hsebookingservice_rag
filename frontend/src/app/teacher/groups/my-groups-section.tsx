@@ -107,11 +107,11 @@ export function MyGroupsSection() {
                     faculty={offer.faculty}
                     program={offer.program}
                     modules={offer.modules}
-                    groupsCount={booking.groups_count}
+                    groupsCount={offer.total_groups}
                     studentFirstName={booking.student_first_name}
                     studentLastName={booking.student_last_name}
                     studentEmail={booking.student_email}
-                    assistanceFormat={booking.assistance_format}
+                    paymentType={booking.payment_type}
                     onMoreDetails={() => setSelectedItem({ offer, booking })}
                   />
                 ))}

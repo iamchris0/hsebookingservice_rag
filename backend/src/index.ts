@@ -7,10 +7,8 @@ import postgres from "@fastify/postgres";
 import dotenv from "dotenv";
 import bcrypt from "bcrypt";
 
-// Загружаем переменные окружения
 dotenv.config();
 
-// Проверяем наличие обязательных переменных окружения
 const requiredEnvVars = [
   "DB_HOST",
   "DB_PORT",
@@ -34,7 +32,6 @@ const app = Fastify({
   disableRequestLogging: false,
 });
 
-// 1. Helmet - защита заголовков безопасности
 await app.register(helmet, {
   contentSecurityPolicy: {
     directives: {
@@ -47,25 +44,23 @@ await app.register(helmet, {
   crossOriginEmbedderPolicy: false,
 });
 
-// 2. CORS - настройка политики CORS с максимальной защитой
 await app.register(cors, {
   origin: process.env.CORS_ORIGIN?.split(",") || ["http://localhost:3000"],
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
   exposedHeaders: ["X-Total-Count", "X-Page", "X-Per-Page"],
-  maxAge: 86400, // 24 часа
+  maxAge: 86400,
   preflightContinue: false,
   optionsSuccessStatus: 204,
 });
 
-// 3. Rate Limiting - защита от DDoS и брутфорса
 await app.register(rateLimit, {
-  max: 100, // максимальное количество запросов
-  timeWindow: "1 minute", // за период времени
-  cache: 10000, // количество IP адресов для кеширования
-  whitelist: ["127.0.0.1"], // белый список IP (опционально)
-  redis: undefined, // можно подключить Redis для распределенного rate limiting
+  max: 100,
+  timeWindow: "1 minute",
+  cache: 10000,
+  whitelist: ["127.0.0.1"],
+  redis: undefined,
   skipOnError: false,
   addHeaders: {
     "x-ratelimit-limit": true,
@@ -74,7 +69,6 @@ await app.register(rateLimit, {
   },
 });
 
-// 4. JWT - аутентификация и авторизация
 await app.register(jwt, {
   secret: process.env.JWT_SECRET!,
   sign: {
@@ -86,18 +80,15 @@ await app.register(jwt, {
   },
 });
 
-// 5. PostgreSQL - подключение к базе данных
 await app.register(postgres, {
   connectionString: `postgresql://${process.env.DB_USER}:${process.env.DB_PASSWORD}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`,
   ssl: process.env.DB_SSL === "true" ? { rejectUnauthorized: false } : false,
 });
 
-// Проверка подключения к базе данных и создание таблиц
 app.addHook("onReady", async () => {
   try {
     const client = await app.pg.connect();
     await client.query("SELECT NOW()");
-
     client.release();
     app.log.info("✅ PostgreSQL соединение успешно установлено");
   } catch (error) {
@@ -107,7 +98,6 @@ app.addHook("onReady", async () => {
   }
 });
 
-// Декоратор для проверки JWT токена
 app.decorate("authenticate", async function (request, reply) {
   try {
     await request.jwtVerify();
@@ -116,21 +106,19 @@ app.decorate("authenticate", async function (request, reply) {
   }
 });
 
-// Типы для TypeScript
 declare module "fastify" {
   interface FastifyInstance {
     authenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
   }
 }
 
-// Health check endpoint (публичный)
+// ─── Health check ─────────────────────────────────────────────────────────────
+
 app.get("/health", async (_request, reply) => {
   try {
-    // Проверяем подключение к БД
     const client = await app.pg.connect();
     await client.query("SELECT 1");
     client.release();
-
     return {
       ok: true,
       timestamp: new Date().toISOString(),
@@ -154,12 +142,13 @@ app.get(
   async (request, _reply) => {
     return {
       message: "This is a protected route",
-      user: request.user, // JWT payload доступен через request.user
+      user: request.user,
     };
   }
 );
 
-// Endpoint для логина (выдача JWT токена)
+// ─── Auth ─────────────────────────────────────────────────────────────────────
+
 app.post<{
   Body: { email: string; password: string };
 }>("/api/login", async (request, reply) => {
@@ -167,43 +156,29 @@ app.post<{
 
   try {
     const client = await app.pg.connect();
-    
-    // Получаем id, пароль, роль и имя из базы данных
     const result = await client.query(
-      "SELECT id, password, role, first_name, last_name FROM users_new WHERE email = $1",
+      "SELECT id, password_hash, role, first_name, last_name FROM dc_new.users WHERE email = $1",
       [email]
     );
-
     client.release();
 
-    // Проверяем, существует ли пользователь
     if (result.rows.length === 0) {
       reply.code(401).send({ error: "Аккаунта не существует" });
       return;
     }
 
-    const { id, password: hashedPassword, role, first_name, last_name } = result.rows[0];
+    const { id, password_hash, role, first_name, last_name } = result.rows[0];
 
-    // Проверяем пароль
-    const isPasswordValid = await bcrypt.compare(password, hashedPassword);
-
+    const isPasswordValid = await bcrypt.compare(password, password_hash);
     if (!isPasswordValid) {
       reply.code(401).send({ error: "Неверные данные входа" });
       return;
     }
 
-    // Генерируем JWT токен (включаем id для последующих запросов)
     const token = app.jwt.sign({ id, email, role });
-
     return {
       token,
-      user: {
-        id,
-        email,
-        role,
-        firstName: first_name,
-        lastName: last_name,
-      },
+      user: { id, email, role, firstName: first_name, lastName: last_name },
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -212,72 +187,27 @@ app.post<{
   }
 });
 
-// ─── Student endpoints ────────────────────────────────────────────────────────
-
-// GET /api/student/my-groups — активные записи текущего студента
-app.get(
-  "/api/student/my-groups",
+app.post(
+  "/api/logout",
   { preHandler: [app.authenticate] },
-  async (request, reply) => {
-    const user = request.user as { id: number; email: string; role: string };
-
-    if (user.role !== "student") {
-      return reply.code(403).send({ error: "Forbidden" });
-    }
-
-    const client = await app.pg.connect();
-    try {
-      const result = await client.query(
-        `SELECT
-           b.id,
-           b.discipline,
-           b.groups_count,
-           b.program,
-           CASE WHEN b.module IS NOT NULL THEN ARRAY[b.module] ELSE ARRAY[]::integer[] END AS modules,
-           u.first_name,
-           u.last_name,
-           u.email AS teacher_email
-         FROM bookings b
-         JOIN users_new u ON b.teacher_id = u.id
-         WHERE b.student_id = $1 AND b.active = true
-         ORDER BY b.created_at DESC`,
-        [user.id]
-      );
-      return result.rows;
-    } finally {
-      client.release();
-    }
+  async (request, _reply) => {
+    const user = request.user as { email?: string };
+    app.log.info(`User logged out: ${user.email || "unknown"}`);
+    return { message: "Logged out successfully" };
   }
 );
 
-// GET /api/student/search — доступные предложения от менеджеров
+// ─── Lookup tables ────────────────────────────────────────────────────────────
+
+// GET /api/disciplines — list all disciplines
 app.get(
-  "/api/student/search",
+  "/api/disciplines",
   { preHandler: [app.authenticate] },
   async (_request, _reply) => {
     const client = await app.pg.connect();
     try {
       const result = await client.query(
-        `SELECT
-           o.id,
-           o.discipline,
-           o.program,
-           o.modules,
-           o.total_groups,
-           u.first_name,
-           u.last_name,
-           u.email AS teacher_email,
-           (o.total_groups - COALESCE(SUM(b.groups_count), 0)) AS available_groups
-         FROM offers o
-         JOIN users_new u ON o.teacher_id = u.id
-         LEFT JOIN bookings b
-           ON b.teacher_id = o.teacher_id
-          AND b.discipline = o.discipline
-          AND b.active = true
-         WHERE o.active = true
-         GROUP BY o.id, u.id, u.first_name, u.last_name, u.email
-         HAVING (o.total_groups - COALESCE(SUM(b.groups_count), 0)) > 0
-         ORDER BY o.created_at DESC`
+        `SELECT id, name FROM dc_new.disciplines ORDER BY name`
       );
       return result.rows;
     } finally {
@@ -286,66 +216,54 @@ app.get(
   }
 );
 
-// POST /api/student/bookings — студент записывается на предложение
-app.post<{
-  Body: { offerId: number; groupsCount: number };
-}>(
-  "/api/student/bookings",
+// GET /api/faculties — list all faculties
+app.get(
+  "/api/faculties",
   { preHandler: [app.authenticate] },
-  async (request, reply) => {
-    const user = request.user as { id: number; email: string; role: string };
-
-    if (user.role !== "student") {
-      return reply.code(403).send({ error: "Forbidden" });
-    }
-
-    const { offerId, groupsCount } = request.body;
-
-    if (!offerId || !groupsCount || groupsCount < 1) {
-      return reply.code(400).send({ error: "Некорректные данные запроса" });
-    }
-
+  async (_request, _reply) => {
     const client = await app.pg.connect();
     try {
-      // Получаем предложение и считаем доступные места
-      const offerResult = await client.query(
-        `SELECT
-           o.teacher_id,
-           o.discipline,
-           o.program,
-           (o.total_groups - COALESCE(SUM(b.groups_count), 0)) AS available_groups
-         FROM offers o
-         LEFT JOIN bookings b
-           ON b.teacher_id = o.teacher_id
-          AND b.discipline = o.discipline
-          AND b.active = true
-         WHERE o.id = $1 AND o.active = true
-         GROUP BY o.id`,
-        [offerId]
+      const result = await client.query(
+        `SELECT id, name FROM dc_new.faculties ORDER BY name`
       );
+      return result.rows;
+    } finally {
+      client.release();
+    }
+  }
+);
 
-      if (offerResult.rows.length === 0) {
-        return reply.code(404).send({ error: "Предложение не найдено или неактивно" });
-      }
-
-      const offer = offerResult.rows[0];
-      const available = Number(offer.available_groups);
-
-      if (groupsCount > available) {
-        return reply.code(409).send({
-          error: `Недостаточно свободных мест. Доступно: ${available}`,
-        });
-      }
-
-      // Создаём запись
-      const insertResult = await client.query(
-        `INSERT INTO bookings (student_id, teacher_id, discipline, groups_count, program, active)
-         VALUES ($1, $2, $3, $4, $5, true)
-         RETURNING id`,
-        [user.id, offer.teacher_id, offer.discipline, groupsCount, offer.program]
+// GET /api/programs — list all programs with faculty name
+app.get(
+  "/api/programs",
+  { preHandler: [app.authenticate] },
+  async (_request, _reply) => {
+    const client = await app.pg.connect();
+    try {
+      const result = await client.query(
+        `SELECT p.id, p.name, f.name AS faculty_name
+         FROM dc_new.programs p
+         JOIN dc_new.faculties f ON f.id = p.faculty_id
+         ORDER BY f.name, p.name`
       );
+      return result.rows;
+    } finally {
+      client.release();
+    }
+  }
+);
 
-      return reply.code(201).send({ bookingId: insertResult.rows[0].id });
+// GET /api/modules — list all modules
+app.get(
+  "/api/modules",
+  { preHandler: [app.authenticate] },
+  async (_request, _reply) => {
+    const client = await app.pg.connect();
+    try {
+      const result = await client.query(
+        `SELECT id, number FROM dc_new.modules ORDER BY number`
+      );
+      return result.rows;
     } finally {
       client.release();
     }
@@ -354,7 +272,6 @@ app.post<{
 
 // ─── Teacher directory ────────────────────────────────────────────────────────
 
-// GET /api/teachers — список всех преподавателей (для выпадающего списка)
 app.get(
   "/api/teachers",
   { preHandler: [app.authenticate] },
@@ -363,7 +280,7 @@ app.get(
     try {
       const result = await client.query(
         `SELECT id, first_name, last_name, email
-         FROM users_new
+         FROM dc_new.users
          WHERE role = 'teacher'
          ORDER BY last_name, first_name`
       );
@@ -374,45 +291,51 @@ app.get(
   }
 );
 
-// ─── Manager endpoints ────────────────────────────────────────────────────────
+// ─── Student endpoints ────────────────────────────────────────────────────────
 
-// GET /api/manager/offers — все активные предложения с ссылками
+// GET /api/student/my-groups — active bookings for the current student
 app.get(
-  "/api/manager/offers",
+  "/api/student/my-groups",
   { preHandler: [app.authenticate] },
   async (request, reply) => {
-    const user = request.user as { role: string };
-    if (user.role !== "manager") {
+    const user = request.user as { id: number; role: string };
+    if (user.role !== "student") {
       return reply.code(403).send({ error: "Forbidden" });
     }
+
     const client = await app.pg.connect();
     try {
       const result = await client.query(
         `SELECT
-           o.id,
-           o.discipline,
-           o.faculty,
-           o.program,
-           o.total_groups,
-           o.modules,
-           u.id AS teacher_id,
+           b.id,
+           d.name  AS discipline,
+           p.name  AS program,
+           f.name  AS faculty,
+           b.payment_type,
            u.first_name,
            u.last_name,
            u.email AS teacher_email,
-           m.first_name AS manager_first_name,
-           m.last_name AS manager_last_name,
-           COALESCE(
-             json_agg(json_build_object('name', ol.name, 'url', ol.url))
-               FILTER (WHERE ol.id IS NOT NULL),
-             '[]'
-           ) AS links
-         FROM offers o
-         JOIN users_new u ON o.teacher_id = u.id
-         LEFT JOIN users_new m ON m.id = o.manager_id
-         LEFT JOIN offer_links ol ON ol.offer_id = o.id
-         WHERE o.active = true
-         GROUP BY o.id, u.id, u.first_name, u.last_name, u.email, m.first_name, m.last_name
-         ORDER BY o.created_at DESC`
+           COALESCE((
+             SELECT array_agg(m.number ORDER BY m.number)
+             FROM dc_new.course_offer_modules com
+             JOIN dc_new.modules m ON com.module_id = m.id
+             WHERE com.offer_id = co.id
+           ), ARRAY[]::int[]) AS modules,
+           COALESCE((
+             SELECT json_agg(json_build_object('name', col.name, 'url', col.url)
+                             ORDER BY col.sort_order)
+             FROM dc_new.course_offer_links col
+             WHERE col.offer_id = co.id
+           ), '[]'::json) AS links
+         FROM dc_new.bookings b
+         JOIN dc_new.course_offers co  ON b.offer_id      = co.id
+         JOIN dc_new.disciplines  d    ON co.discipline_id = d.id
+         JOIN dc_new.programs     p    ON co.program_id    = p.id
+         JOIN dc_new.faculties    f    ON p.faculty_id     = f.id
+         JOIN dc_new.users        u    ON co.teacher_id    = u.id
+         WHERE b.student_id = $1 AND b.status = 'active'
+         ORDER BY b.created_at DESC`,
+        [user.id]
       );
       return result.rows;
     } finally {
@@ -421,18 +344,123 @@ app.get(
   }
 );
 
-// POST /api/manager/offers — создать новое предложение со ссылками
+// GET /api/student/search — open offers with available slots
+app.get(
+  "/api/student/search",
+  { preHandler: [app.authenticate] },
+  async (_request, _reply) => {
+    const client = await app.pg.connect();
+    try {
+      const result = await client.query(
+        `SELECT
+           co.id,
+           d.name  AS discipline,
+           p.name  AS program,
+           f.name  AS faculty,
+           co.total_groups,
+           u.first_name,
+           u.last_name,
+           u.email AS teacher_email,
+           COALESCE((
+             SELECT array_agg(m.number ORDER BY m.number)
+             FROM dc_new.course_offer_modules com
+             JOIN dc_new.modules m ON com.module_id = m.id
+             WHERE com.offer_id = co.id
+           ), ARRAY[]::int[]) AS modules,
+           (co.total_groups - COALESCE((
+             SELECT COUNT(*) FROM dc_new.bookings b
+             WHERE b.offer_id = co.id AND b.status = 'active'
+           ), 0)) AS available_groups
+         FROM dc_new.course_offers co
+         JOIN dc_new.disciplines d ON co.discipline_id = d.id
+         JOIN dc_new.programs    p ON co.program_id    = p.id
+         JOIN dc_new.faculties   f ON p.faculty_id     = f.id
+         JOIN dc_new.users       u ON co.teacher_id    = u.id
+         WHERE co.status = 'open'
+           AND (co.total_groups - COALESCE((
+             SELECT COUNT(*) FROM dc_new.bookings b
+             WHERE b.offer_id = co.id AND b.status = 'active'
+           ), 0)) > 0
+         ORDER BY co.created_at DESC`
+      );
+      return result.rows;
+    } finally {
+      client.release();
+    }
+  }
+);
+
+// POST /api/student/bookings — student books an offer
 app.post<{
-  Body: {
-    teacherId: number;
-    discipline: string;
-    faculty: string;
-    program: string;
-    totalGroups: number;
-    modules: number[];
-    links: { name: string; url: string }[];
-  };
+  Body: { offerId: number; paymentType: "money" | "credits" };
 }>(
+  "/api/student/bookings",
+  { preHandler: [app.authenticate] },
+  async (request, reply) => {
+    const user = request.user as { id: number; role: string };
+    if (user.role !== "student") {
+      return reply.code(403).send({ error: "Forbidden" });
+    }
+
+    const { offerId, paymentType } = request.body;
+
+    if (!offerId || !paymentType || !["money", "credits"].includes(paymentType)) {
+      return reply.code(400).send({ error: "Некорректные данные запроса" });
+    }
+
+    const client = await app.pg.connect();
+    try {
+      // Check offer exists and is open
+      const offerResult = await client.query(
+        `SELECT
+           co.id,
+           co.teacher_id,
+           co.total_groups,
+           COALESCE((
+             SELECT COUNT(*) FROM dc_new.bookings b
+             WHERE b.offer_id = co.id AND b.status = 'active'
+           ), 0) AS booked_count
+         FROM dc_new.course_offers co
+         WHERE co.id = $1 AND co.status = 'open'`,
+        [offerId]
+      );
+
+      if (offerResult.rows.length === 0) {
+        return reply.code(404).send({ error: "Предложение не найдено или неактивно" });
+      }
+
+      const offer = offerResult.rows[0];
+      const available = Number(offer.total_groups) - Number(offer.booked_count);
+
+      if (available <= 0) {
+        return reply.code(409).send({ error: "Нет свободных мест" });
+      }
+
+      // Insert booking; DB UNIQUE constraint catches duplicate attempts
+      const insertResult = await client.query(
+        `INSERT INTO dc_new.bookings (offer_id, student_id, payment_type, created_by_teacher_id)
+         VALUES ($1, $2, $3, $4)
+         RETURNING id`,
+        [offerId, user.id, paymentType, offer.teacher_id]
+      );
+
+      return reply.code(201).send({ bookingId: insertResult.rows[0].id });
+    } catch (error: unknown) {
+      const pgError = error as { code?: string };
+      if (pgError.code === "23505") {
+        return reply.code(409).send({ error: "Вы уже записаны на это предложение" });
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+);
+
+// ─── Manager endpoints ────────────────────────────────────────────────────────
+
+// GET /api/manager/offers — all open offers
+app.get(
   "/api/manager/offers",
   { preHandler: [app.authenticate] },
   async (request, reply) => {
@@ -441,31 +469,122 @@ app.post<{
       return reply.code(403).send({ error: "Forbidden" });
     }
 
-    const { teacherId, discipline, faculty, program, totalGroups, modules, links } = request.body;
-
-    if (!teacherId || !discipline || !program || !totalGroups || !modules?.length) {
-      return reply.code(400).send({ error: "Некорректные данные запроса" });
-    }
-
-    const manager = request.user as { id: number };
-
     const client = await app.pg.connect();
     try {
       const result = await client.query(
-        `INSERT INTO offers (teacher_id, discipline, faculty, program, total_groups, modules, manager_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `SELECT
+           co.id,
+           d.name  AS discipline,
+           f.name  AS faculty,
+           p.name  AS program,
+           co.total_groups,
+           co.teacher_id,
+           u.first_name,
+           u.last_name,
+           u.email AS teacher_email,
+           mg.first_name AS manager_first_name,
+           mg.last_name  AS manager_last_name,
+           COALESCE((
+             SELECT array_agg(m.number ORDER BY m.number)
+             FROM dc_new.course_offer_modules com
+             JOIN dc_new.modules m ON com.module_id = m.id
+             WHERE com.offer_id = co.id
+           ), ARRAY[]::int[]) AS modules,
+           COALESCE((
+             SELECT json_agg(json_build_object('name', col.name, 'url', col.url)
+                             ORDER BY col.sort_order)
+             FROM dc_new.course_offer_links col
+             WHERE col.offer_id = co.id
+           ), '[]'::json) AS links
+         FROM dc_new.course_offers co
+         JOIN dc_new.disciplines d ON co.discipline_id = d.id
+         JOIN dc_new.programs    p ON co.program_id    = p.id
+         JOIN dc_new.faculties   f ON p.faculty_id     = f.id
+         JOIN dc_new.users       u ON co.teacher_id    = u.id
+         LEFT JOIN dc_new.users mg ON mg.id = co.manager_id
+         WHERE co.status = 'open'
+         ORDER BY co.created_at DESC`
+      );
+      return result.rows;
+    } finally {
+      client.release();
+    }
+  }
+);
+
+// POST /api/manager/offers — create a new offer (upserts faculty and program by name)
+app.post<{
+  Body: {
+    teacherId: number;
+    disciplineId: number;
+    facultyName: string;
+    programName: string;
+    totalGroups: number;
+    moduleIds: number[];
+    links: { name: string; url: string }[];
+  };
+}>(
+  "/api/manager/offers",
+  { preHandler: [app.authenticate] },
+  async (request, reply) => {
+    const user = request.user as { id: number; role: string };
+    if (user.role !== "manager") {
+      return reply.code(403).send({ error: "Forbidden" });
+    }
+
+    const { teacherId, disciplineId, facultyName, programName, totalGroups, moduleIds, links } = request.body;
+
+    if (!teacherId || !disciplineId || !facultyName?.trim() || !programName?.trim() || !totalGroups || !moduleIds?.length) {
+      return reply.code(400).send({ error: "Некорректные данные запроса" });
+    }
+
+    const client = await app.pg.connect();
+    try {
+      // Upsert faculty
+      const facultyResult = await client.query(
+        `INSERT INTO dc_new.faculties (name)
+         VALUES ($1)
+         ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
          RETURNING id`,
-        [teacherId, discipline, faculty ?? "", program, totalGroups, modules, manager.id]
+        [facultyName.trim()]
+      );
+      const facultyId = facultyResult.rows[0].id;
+
+      // Upsert program (unique per faculty)
+      const programResult = await client.query(
+        `INSERT INTO dc_new.programs (faculty_id, name)
+         VALUES ($1, $2)
+         ON CONFLICT (faculty_id, name) DO UPDATE SET name = EXCLUDED.name
+         RETURNING id`,
+        [facultyId, programName.trim()]
+      );
+      const programId = programResult.rows[0].id;
+
+      // Create offer
+      const result = await client.query(
+        `INSERT INTO dc_new.course_offers (teacher_id, manager_id, discipline_id, program_id, total_groups)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING id`,
+        [teacherId, user.id, disciplineId, programId, totalGroups]
       );
 
       const offerId = result.rows[0].id;
 
+      for (const moduleId of moduleIds) {
+        await client.query(
+          `INSERT INTO dc_new.course_offer_modules (offer_id, module_id) VALUES ($1, $2)`,
+          [offerId, moduleId]
+        );
+      }
+
       if (links && links.length > 0) {
-        for (const link of links) {
-          if (link.name && link.url) {
+        for (let i = 0; i < links.length; i++) {
+          const link = links[i];
+          if (link && link.name && link.url) {
             await client.query(
-              `INSERT INTO offer_links (offer_id, name, url) VALUES ($1, $2, $3)`,
-              [offerId, link.name, link.url]
+              `INSERT INTO dc_new.course_offer_links (offer_id, name, url, sort_order)
+               VALUES ($1, $2, $3, $4)`,
+              [offerId, link.name, link.url, i]
             );
           }
         }
@@ -478,68 +597,7 @@ app.post<{
   }
 );
 
-// ─── Teacher endpoints ────────────────────────────────────────────────────────
-
-// GET /api/teacher/groups — все активные предложения для текущего преподавателя с бронированиями
-app.get(
-  "/api/teacher/groups",
-  { preHandler: [app.authenticate] },
-  async (request, reply) => {
-    const user = request.user as { id: number; role: string };
-    if (user.role !== "teacher") {
-      return reply.code(403).send({ error: "Forbidden" });
-    }
-    const client = await app.pg.connect();
-    try {
-      const result = await client.query(
-        `SELECT
-           o.id,
-           o.discipline,
-           o.faculty,
-           o.program,
-           o.total_groups,
-           o.modules,
-           m.first_name AS manager_first_name,
-           m.last_name  AS manager_last_name,
-           (o.total_groups - COALESCE((
-             SELECT SUM(b2.groups_count) FROM bookings b2
-             WHERE b2.teacher_id = o.teacher_id
-               AND b2.discipline = o.discipline
-               AND b2.active = true
-           ), 0)) AS available_groups,
-           COALESCE((
-             SELECT json_agg(json_build_object('name', ol.name, 'url', ol.url))
-             FROM offer_links ol WHERE ol.offer_id = o.id
-           ), '[]') AS links,
-           COALESCE((
-             SELECT json_agg(json_build_object(
-               'booking_id', b.id,
-               'groups_count', b.groups_count,
-               'assistance_format', b.assistance_format,
-               'student_first_name', s.first_name,
-               'student_last_name', s.last_name,
-               'student_email', s.email
-             ))
-             FROM bookings b
-             JOIN users_new s ON s.id = b.student_id
-             WHERE b.teacher_id = o.teacher_id
-               AND b.discipline = o.discipline
-               AND b.active = true
-           ), '[]') AS bookings
-         FROM offers o
-         LEFT JOIN users_new m ON m.id = o.manager_id
-         WHERE o.teacher_id = $1 AND o.active = true
-         ORDER BY o.created_at DESC`,
-        [user.id]
-      );
-      return result.rows;
-    } finally {
-      client.release();
-    }
-  }
-);
-
-// GET /api/manager/groups-stats — статистика групп по дисциплинам
+// GET /api/manager/groups-stats — booked vs total per discipline
 app.get(
   "/api/manager/groups-stats",
   { preHandler: [app.authenticate] },
@@ -548,23 +606,22 @@ app.get(
     if (user.role !== "manager") {
       return reply.code(403).send({ error: "Forbidden" });
     }
+
     const client = await app.pg.connect();
     try {
       const result = await client.query(
         `SELECT
-           o.discipline,
-           SUM(o.total_groups) AS total_groups,
-           SUM(o.total_groups - COALESCE(b.booked, 0)) AS groups_without_assistant
-         FROM offers o
-         LEFT JOIN (
-           SELECT teacher_id, discipline, SUM(groups_count) AS booked
-           FROM bookings
-           WHERE active = true
-           GROUP BY teacher_id, discipline
-         ) b ON b.teacher_id = o.teacher_id AND b.discipline = o.discipline
-         WHERE o.active = true
-         GROUP BY o.discipline
-         ORDER BY o.discipline`
+           d.name AS discipline,
+           SUM(co.total_groups) AS total_groups,
+           SUM(co.total_groups - COALESCE((
+             SELECT COUNT(*) FROM dc_new.bookings b
+             WHERE b.offer_id = co.id AND b.status = 'active'
+           ), 0)) AS groups_without_assistant
+         FROM dc_new.course_offers co
+         JOIN dc_new.disciplines d ON co.discipline_id = d.id
+         WHERE co.status = 'open'
+         GROUP BY d.name
+         ORDER BY d.name`
       );
       return result.rows;
     } finally {
@@ -573,7 +630,7 @@ app.get(
   }
 );
 
-// DELETE /api/manager/offers/:id — деактивировать предложение
+// DELETE /api/manager/offers/:id — close an offer
 app.delete<{ Params: { id: string } }>(
   "/api/manager/offers/:id",
   { preHandler: [app.authenticate] },
@@ -591,7 +648,9 @@ app.delete<{ Params: { id: string } }>(
     const client = await app.pg.connect();
     try {
       const result = await client.query(
-        `UPDATE offers SET active = false WHERE id = $1 RETURNING id`,
+        `UPDATE dc_new.course_offers SET status = 'closed', updated_at = now()
+         WHERE id = $1 AND status = 'open'
+         RETURNING id`,
         [offerId]
       );
       if (result.rowCount === 0) {
@@ -604,59 +663,94 @@ app.delete<{ Params: { id: string } }>(
   }
 );
 
-// Endpoint для выхода (logout)
-app.post(
-  "/api/logout",
+// ─── Teacher endpoints ────────────────────────────────────────────────────────
+
+// GET /api/teacher/groups — open offers for the current teacher with bookings
+app.get(
+  "/api/teacher/groups",
   { preHandler: [app.authenticate] },
-  async (request, _reply) => {
+  async (request, reply) => {
+    const user = request.user as { id: number; role: string };
+    if (user.role !== "teacher") {
+      return reply.code(403).send({ error: "Forbidden" });
+    }
+
+    const client = await app.pg.connect();
     try {
-      // В случае JWT токенов, клиент должен удалить токен на своей стороне
-      // Здесь мы можем добавить логирование выхода для аудита
-      const user = request.user as { email?: string; role?: string };
-      
-      app.log.info(`User logged out: ${user.email || "unknown"}`);
-      
-      return {
-        message: "Logged out successfully",
-      };
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      app.log.error(`Logout error: ${errorMessage}`);
-      // Даже при ошибке возвращаем успешный ответ, так как токен удаляется на клиенте
-      return {
-        message: "Logged out successfully",
-      };
+      const result = await client.query(
+        `SELECT
+           co.id,
+           d.name AS discipline,
+           f.name AS faculty,
+           p.name AS program,
+           co.total_groups,
+           mg.first_name AS manager_first_name,
+           mg.last_name  AS manager_last_name,
+           (co.total_groups - COALESCE((
+             SELECT COUNT(*) FROM dc_new.bookings b2
+             WHERE b2.offer_id = co.id AND b2.status = 'active'
+           ), 0)) AS available_groups,
+           COALESCE((
+             SELECT array_agg(m.number ORDER BY m.number)
+             FROM dc_new.course_offer_modules com
+             JOIN dc_new.modules m ON com.module_id = m.id
+             WHERE com.offer_id = co.id
+           ), ARRAY[]::int[]) AS modules,
+           COALESCE((
+             SELECT json_agg(json_build_object('name', col.name, 'url', col.url)
+                             ORDER BY col.sort_order)
+             FROM dc_new.course_offer_links col
+             WHERE col.offer_id = co.id
+           ), '[]'::json) AS links,
+           COALESCE((
+             SELECT json_agg(json_build_object(
+               'booking_id',         b.id,
+               'payment_type',       b.payment_type,
+               'student_first_name', s.first_name,
+               'student_last_name',  s.last_name,
+               'student_email',      s.email
+             ))
+             FROM dc_new.bookings b
+             JOIN dc_new.users s ON s.id = b.student_id
+             WHERE b.offer_id = co.id AND b.status = 'active'
+           ), '[]'::json) AS bookings
+         FROM dc_new.course_offers co
+         JOIN dc_new.disciplines d ON co.discipline_id = d.id
+         JOIN dc_new.programs    p ON co.program_id    = p.id
+         JOIN dc_new.faculties   f ON p.faculty_id     = f.id
+         LEFT JOIN dc_new.users mg ON mg.id = co.manager_id
+         WHERE co.teacher_id = $1 AND co.status = 'open'
+         ORDER BY co.created_at DESC`,
+        [user.id]
+      );
+      return result.rows;
+    } finally {
+      client.release();
     }
   }
 );
 
-// Обработка ошибок
+// ─── Error handling ────────────────────────────────────────────────────────────
+
 app.setErrorHandler((error, _request, reply) => {
   app.log.error(error);
 
   const errorMessage = error instanceof Error ? error.message : String(error);
   const errorStack = error instanceof Error ? error.stack : undefined;
-  const statusCode = (error && typeof error === "object" && "statusCode" in error && typeof error.statusCode === "number") 
-    ? error.statusCode 
-    : 500;
-  const validation = (error && typeof error === "object" && "validation" in error) 
-    ? error.validation 
-    : undefined;
+  const statusCode =
+    error && typeof error === "object" && "statusCode" in error && typeof error.statusCode === "number"
+      ? error.statusCode
+      : 500;
+  const validation =
+    error && typeof error === "object" && "validation" in error ? error.validation : undefined;
 
   if (validation) {
-    reply.code(400).send({
-      error: "Validation Error",
-      message: errorMessage,
-      details: validation,
-    });
+    reply.code(400).send({ error: "Validation Error", message: errorMessage, details: validation });
     return;
   }
 
   if (statusCode === 401) {
-    reply.code(401).send({
-      error: "Unauthorized",
-      message: errorMessage,
-    });
+    reply.code(401).send({ error: "Unauthorized", message: errorMessage });
     return;
   }
 
@@ -666,7 +760,8 @@ app.setErrorHandler((error, _request, reply) => {
   });
 });
 
-// Graceful shutdown
+// ─── Graceful shutdown ─────────────────────────────────────────────────────────
+
 const gracefulShutdown = async (signal: string) => {
   app.log.info(`Received ${signal}, closing server gracefully...`);
   try {
@@ -682,7 +777,6 @@ const gracefulShutdown = async (signal: string) => {
 process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
 process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 
-// Запуск сервера
 const port = Number(process.env.PORT ?? 3001);
 const host = process.env.HOST || "0.0.0.0";
 
