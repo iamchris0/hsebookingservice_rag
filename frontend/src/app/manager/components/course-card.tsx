@@ -1,8 +1,9 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Edit, Trash2, Users, BookOpen, GraduationCap, UsersRound } from "lucide-react"
 import { Course } from "../types"
+import { CourseDetailsDialog } from "./course-details-dialog"
 
 export interface CourseCardProps {
   course: Course
@@ -10,36 +11,79 @@ export interface CourseCardProps {
   onDelete: (id: string) => void
 }
 
+function ConfirmDeleteDialog({
+  isOpen,
+  onClose,
+  onConfirm,
+}: {
+  isOpen: boolean
+  onClose: () => void
+  onConfirm: () => void
+}) {
+  const [isVisible, setIsVisible] = useState(false)
+  const [isAnimating, setIsAnimating] = useState(false)
+
+  useEffect(() => {
+    if (isOpen) {
+      setIsVisible(true)
+      const t = setTimeout(() => setIsAnimating(true), 50)
+      return () => clearTimeout(t)
+    } else {
+      setIsAnimating(false)
+      const t = setTimeout(() => setIsVisible(false), 300)
+      return () => clearTimeout(t)
+    }
+  }, [isOpen])
+
+  if (!isVisible) return null
+
+  return (
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center transition-all duration-300 ${
+        isAnimating ? "bg-black/50" : "bg-black/0"
+      }`}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div
+        className={`bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl transition-all duration-300 ${
+          isAnimating ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-95 translate-y-4"
+        }`}
+      >
+        <p className="text-base font-bold text-black m-4 text-center">
+          Вы уверены, что хотите удалить этот курс?
+        </p>
+        <p className="text-sm text-gray-500 mb-6 text-center">Это действие необратимо.</p>
+        <div className="flex gap-3">
+          <Button
+            variant="outline"
+            className="flex-1 rounded-full border-2 border-gray-300 text-black hover:bg-gray-50"
+            onClick={onClose}
+          >
+            Отмена
+          </Button>
+          <Button
+            className="flex-1 rounded-full bg-[#ff1ef7] hover:bg-[#e000dc] text-white border-0"
+            onClick={onConfirm}
+          >
+            Удалить
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function CourseCard({ course, onEdit, onDelete }: CourseCardProps) {
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [detailsOpen, setDetailsOpen] = useState(false)
 
   return (
     <>
-      {confirmOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl">
-            <p className="text-base font-bold text-black m-4 text-center">
-              Вы уверены, что хотите удалить этот курс?
-            </p>
-            <p className="text-sm text-gray-500 mb-6 text-center">Это действие необратимо.</p>
-            <div className="flex gap-3">
-              <Button
-                variant="outline"
-                className="flex-1 rounded-full border-2 border-gray-300 text-black hover:bg-gray-50"
-                onClick={() => setConfirmOpen(false)}
-              >
-                Отмена
-              </Button>
-              <Button
-                className="flex-1 rounded-full bg-[#ff1ef7] hover:bg-[#e000dc] text-white border-0"
-                onClick={() => { onDelete(course.id); setConfirmOpen(false) }}
-              >
-                Удалить
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDeleteDialog
+        isOpen={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        onConfirm={() => { onDelete(course.id); setConfirmOpen(false) }}
+      />
       <Card className="bg-white shadow-sm hover:shadow-lg transition-shadow duration-300 border border-gray-100 rounded-2xl overflow-hidden flex flex-col">
         <CardHeader className="flex flex-row items-start justify-between space-y-0 p-4">
           <h2 className="text-base font-bold text-[#000000] min-h-[32px] leading-tight">
@@ -152,11 +196,17 @@ export function CourseCard({ course, onEdit, onDelete }: CourseCardProps) {
           <Button
             variant="outline"
             className="w-full h-10 text-sm font-medium bg-transparent border-2 border-blue-600 text-black hover:bg-blue-600 hover:text-white rounded-full transition-colors"
+            onClick={() => setDetailsOpen(true)}
           >
             More Details
           </Button>
         </CardFooter>
       </Card>
+      <CourseDetailsDialog
+        course={course}
+        isOpen={detailsOpen}
+        onClose={() => setDetailsOpen(false)}
+      />
     </>
   )
 }

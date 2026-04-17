@@ -80,20 +80,25 @@ export default function MyGroupsPage() {
         const mapped: MyGroupCardProps[] = data.map((row: {
           id: number
           discipline: string
-          groups_count: number
+          faculty: string
           program: string
+          payment_type: "money" | "credits"
           modules: number[]
+          links: { name: string; url: string }[]
           first_name: string
           last_name: string
           teacher_email: string
         }) => ({
           id: row.id,
           discipline: toDisplayDiscipline(row.discipline),
-          numberOfGroups: row.groups_count,
+          numberOfGroups: 1,
+          faculty: row.faculty ?? "",
           program: row.program,
           modules: row.modules ?? [],
+          links: row.links ?? [],
           teacherName: `${row.last_name} ${row.first_name}`,
           email: row.teacher_email,
+          paymentType: row.payment_type,
         }))
 
         setGroups(mapped)

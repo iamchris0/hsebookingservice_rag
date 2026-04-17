@@ -4,9 +4,12 @@ export interface MyGroupCardProps {
   discipline: string
   teacherName: string
   email: string
+  faculty: string
   program: string
   numberOfGroups: number
   modules: number[]    // converted from single int on backend
+  paymentType: "money" | "credits"
+  links: { name: string; url: string }[]
 }
 
 // Shape returned by GET /api/student/search

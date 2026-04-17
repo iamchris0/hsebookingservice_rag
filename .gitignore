@@ -125,6 +125,7 @@ dmypy.json
 *.sqlite
 *.sqlite3
 *.db
+*.sql
 
 # ====================
 # Project Specific
