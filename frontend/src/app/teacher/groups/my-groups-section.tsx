@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { toast } from "sonner"
 import { GroupCard } from "./group-card"
 import { GroupDetailsDialog } from "./group-details-dialog"
+import { SelectAssistantDialog } from "./select-assistant-dialog"
 import { CollapsibleSection } from "./collapsible-section"
 import { TeacherOffer, TeacherBooking } from "../types"
 import { toDisplayDiscipline } from "@/lib/disciplines"
@@ -16,6 +17,7 @@ export function MyGroupsSection() {
   const [offers, setOffers] = useState<TeacherOffer[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [selectedItem, setSelectedItem] = useState<SelectedItem>(null)
+  const [selectAssistantOffer, setSelectAssistantOffer] = useState<TeacherOffer | null>(null)
 
   const fetchGroups = async () => {
     try {
@@ -74,6 +76,18 @@ export function MyGroupsSection() {
         booking={selectedItem?.booking ?? null}
       />
 
+      <SelectAssistantDialog
+        isOpen={selectAssistantOffer !== null}
+        onClose={() => setSelectAssistantOffer(null)}
+        onSelect={() => { fetchGroups(); setSelectAssistantOffer(null) }}
+        offerId={selectAssistantOffer?.id ?? 0}
+        offerDiscipline={selectAssistantOffer?.discipline ?? ""}
+        offerFaculty={selectAssistantOffer?.faculty ?? ""}
+        offerProgram={selectAssistantOffer?.program ?? ""}
+        offerGroups={selectAssistantOffer?.total_groups ?? 0}
+        offerAvailableGroups={selectAssistantOffer?.available_groups ?? 0}
+      />
+
       {isLoading && (
         <div className="text-sm text-gray-500 p-4">Загрузка...</div>
       )}
@@ -82,12 +96,12 @@ export function MyGroupsSection() {
         <>
           {/* Section 1: Groups without an assistant */}
           <CollapsibleSection
-            title="Groups without an assistant"
+            title="Группы без ассистента"
             count={withoutAssistant.length}
             defaultOpen={true}
           >
             {withoutAssistant.length === 0 ? (
-              <p className="text-sm text-gray-400 italic p-2">No groups without an assistant.</p>
+              <p className="text-sm text-gray-400 italic p-2">Группы без ассистента отсутствуют.</p>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {withoutAssistant.map((offer) => (
@@ -102,6 +116,7 @@ export function MyGroupsSection() {
                     managerFirstName={offer.manager_first_name}
                     managerLastName={offer.manager_last_name}
                     hideAssistantName={true}
+                    onSelectAssistant={() => setSelectAssistantOffer(offer)}
                   />
                 ))}
               </div>
@@ -115,7 +130,7 @@ export function MyGroupsSection() {
             defaultOpen={true}
           >
             {myGroupItems.length === 0 ? (
-              <p className="text-sm text-gray-400 italic p-2">No groups assigned yet.</p>
+              <p className="text-sm text-gray-400 italic p-2">Группы пока не назначены.</p>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {myGroupItems.map(({ offer, booking }) => (
@@ -143,11 +158,11 @@ export function MyGroupsSection() {
 
           {/* Section 3: Archive (empty for now) */}
           <CollapsibleSection
-            title="Archive groups"
+            title="Архив групп"
             count={0}
             defaultOpen={false}
           >
-            <p className="text-sm text-gray-400 italic p-2">No archived groups.</p>
+            <p className="text-sm text-gray-400 italic p-2">Архив групп пуст.</p>
           </CollapsibleSection>
         </>
       )}

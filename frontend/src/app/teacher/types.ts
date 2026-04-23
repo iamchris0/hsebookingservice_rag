@@ -14,10 +14,11 @@ export interface Group {
 export interface Assistant {
   id: string;
   name: string;
-  skills: Array<{ number: number; name: string }>;
+  skills: Array<{ number: number; name: string; groups: number | null }>;
   faculty: string;
   trainingProgram: string;
   email: string;
+  telegram: string | null;
   isFavorite: boolean;
   currentAssignments: Array<{
     discipline: string;
@@ -25,6 +26,27 @@ export interface Assistant {
     groups: number;
     modules: number[];
   }>;
+}
+
+// Student search (GET /api/teacher/search)
+
+export interface StudentPreference {
+  priority: number
+  discipline: string
+  desired_group_size: number | null
+}
+
+export interface StudentSearchResult {
+  id: number
+  first_name: string
+  last_name: string
+  email: string
+  telegram: string | null
+  study_year: number | null
+  edu_faculty: string | null
+  edu_program: string | null
+  preferences: StudentPreference[]
+  active_assignments: number
 }
 
 export interface DisciplineStat {

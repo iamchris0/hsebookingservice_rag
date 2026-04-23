@@ -45,14 +45,14 @@ function ModulesRow({ groupsCount, modules }: { groupsCount: number; modules: nu
       <div style={{ flex: "0 0 20%" }}>
         <div className="flex items-center gap-1 mb-1">
           <UsersRound className="h-3 w-3 flex-shrink-0" style={{ color: "#2300fa" }} />
-          <p className="text-[10px]" style={{ color: "#2300fa" }}>Groups</p>
+          <p className="text-[10px]" style={{ color: "#2300fa" }}>Группы</p>
         </div>
         <div className="h-8 flex items-center justify-center text-sm font-bold bg-gray-100 rounded-lg">
           {groupsCount}
         </div>
       </div>
       <div style={{ flex: "0 0 calc(80% - 0.5rem)" }}>
-        <p className="text-[10px] mb-1" style={{ color: "#2300fa" }}>Study Modules</p>
+        <p className="text-[10px] mb-1" style={{ color: "#2300fa" }}>Учебные модули</p>
         <div className="flex">
           {[1, 2, 3, 4].map((moduleNum, index) => (
             <div
@@ -83,10 +83,10 @@ function NoAssistantCard({ discipline, faculty, program, modules, groupsCount, m
 
         {/* Each field on its own row, 2px gap */}
         <div className="flex flex-col gap-2">
-          <InfoRow icon={<Tag className="h-3.5 w-3.5 text-black" />} label="Discipline" value={discipline} />
-          <InfoRow icon={<UserCircle2 className="h-3.5 w-3.5 text-black" />} label="Created by" value={managerName} />
-          <InfoRow icon={<GraduationCap className="h-3.5 w-3.5 text-black" />} label="Faculty" value={faculty} />
-          <InfoRow icon={<BookOpen className="h-3.5 w-3.5 text-black" />} label="Program" value={program} />
+          <InfoRow icon={<Tag className="h-3.5 w-3.5 text-black" />} label="Дисциплина" value={discipline} />
+          <InfoRow icon={<UserCircle2 className="h-3.5 w-3.5 text-black" />} label="Создано" value={managerName} />
+          <InfoRow icon={<GraduationCap className="h-3.5 w-3.5 text-black" />} label="Факультет" value={faculty} />
+          <InfoRow icon={<BookOpen className="h-3.5 w-3.5 text-black" />} label="Образовательная программа" value={program} />
         </div>
 
         {/* Groups count + Modules */}
@@ -99,7 +99,7 @@ function NoAssistantCard({ discipline, faculty, program, modules, groupsCount, m
           className="w-full h-9 text-sm font-medium bg-[#DCFF05] hover:bg-[#c9eb00] text-black border border-black rounded-full transition-colors"
           onClick={onSelectAssistant}
         >
-          Select Assistant
+          Выбрать ассистента
         </Button>
       </CardFooter>
     </Card>
@@ -152,13 +152,13 @@ function MyGroupCard({
         </div>
 
         {/* Discipline */}
-        <InfoRow icon={<Tag className="h-3.5 w-3.5 text-black" />} label="Discipline" value={discipline} />
+        <InfoRow icon={<Tag className="h-3.5 w-3.5 text-black" />} label="Дисциплина" value={discipline} />
 
         {/* Faculty */}
-        <InfoRow icon={<GraduationCap className="h-3.5 w-3.5 text-black" />} label="Faculty" value={faculty} />
+        <InfoRow icon={<GraduationCap className="h-3.5 w-3.5 text-black" />} label="Факультет" value={faculty} />
 
         {/* Program */}
-        <InfoRow icon={<BookOpen className="h-3.5 w-3.5 text-black" />} label="Program" value={program} />
+        <InfoRow icon={<BookOpen className="h-3.5 w-3.5 text-black" />} label="Образовательная программа" value={program} />
 
         {/* Groups count + Modules */}
         <ModulesRow groupsCount={groupsCount} modules={modules} />
@@ -173,13 +173,13 @@ function MyGroupCard({
               className="flex-1 h-9 text-sm font-medium bg-transparent border-2 border-gray-400 text-black hover:bg-gray-100 rounded-full transition-colors"
               onClick={onMoreDetails}
             >
-              About student
+              Об ассистенте
             </Button>
             <Button
               className="flex-1 h-9 text-sm font-medium bg-green-500 hover:bg-green-600 text-white rounded-full transition-colors"
               onClick={onAccept}
             >
-              Select
+              Выбрать
             </Button>
           </div>
         ) : (
@@ -188,7 +188,7 @@ function MyGroupCard({
             className="w-full h-9 text-sm font-medium bg-transparent border-2 border-blue-600 text-black hover:bg-blue-600 hover:text-white rounded-full transition-colors"
             onClick={onMoreDetails}
           >
-            More Details
+            Подробнее
           </Button>
         )}
       </CardFooter>

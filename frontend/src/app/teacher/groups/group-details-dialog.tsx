@@ -102,7 +102,7 @@ export function GroupDetailsDialog({ isOpen, onClose, offer, booking }: GroupDet
           <div>
             <div className="flex items-center gap-1.5 mb-1">
               <Tag className="w-3.5 h-3.5 text-[#2300fa]" />
-              <span className="text-xs font-bold text-[#2300fa]">Discipline</span>
+              <span className="text-xs font-bold text-[#2300fa]">Дисциплина</span>
             </div>
             <p className="text-sm text-black bg-gray-100 rounded-lg px-3 py-2">{offer.discipline}</p>
           </div>
@@ -112,14 +112,14 @@ export function GroupDetailsDialog({ isOpen, onClose, offer, booking }: GroupDet
             <div>
               <div className="flex items-center gap-1.5 mb-1">
                 <GraduationCap className="w-3.5 h-3.5 text-[#2300fa]" />
-                <span className="text-xs font-bold text-[#2300fa]">Faculty</span>
+                <span className="text-xs font-bold text-[#2300fa]">Факультет</span>
               </div>
               <p className="text-sm text-black bg-gray-100 rounded-lg px-3 py-2">{offer.faculty || "—"}</p>
             </div>
             <div>
               <div className="flex items-center gap-1.5 mb-1">
                 <BookOpen className="w-3.5 h-3.5 text-[#2300fa]" />
-                <span className="text-xs font-bold text-[#2300fa]">Program</span>
+                <span className="text-xs font-bold text-[#2300fa]">Образовательная программа</span>
               </div>
               <p className="text-sm text-black bg-gray-100 rounded-lg px-3 py-2">{offer.program}</p>
             </div>
@@ -130,14 +130,14 @@ export function GroupDetailsDialog({ isOpen, onClose, offer, booking }: GroupDet
             <div style={{ flex: "0 0 20%" }}>
               <div className="flex items-center gap-1.5 mb-1">
                 <UsersRound className="w-3.5 h-3.5 text-[#2300fa]" />
-                <span className="text-xs font-bold text-[#2300fa]">Groups</span>
+                <span className="text-xs font-bold text-[#2300fa]">Группы</span>
               </div>
               <div className="h-9 flex items-center justify-center text-sm font-semibold bg-gray-100 rounded-lg">
                 {offer.total_groups}
               </div>
             </div>
             <div style={{ flex: "0 0 calc(80% - 0.75rem)" }}>
-              <p className="text-xs font-bold text-[#2300fa] mb-1">Study Modules</p>
+              <p className="text-xs font-bold text-[#2300fa] mb-1">Учебные модули</p>
               <div className="flex">
                 {[1, 2, 3, 4].map((moduleNum, index) => (
                   <div
@@ -158,15 +158,15 @@ export function GroupDetailsDialog({ isOpen, onClose, offer, booking }: GroupDet
           <div>
             <div className="flex items-center gap-1.5 mb-1.5">
               <LinkIcon className="w-3.5 h-3.5 text-[#2300fa]" />
-              <span className="text-xs font-bold text-[#2300fa]">Links</span>
+              <span className="text-xs font-bold text-[#2300fa]">Ссылки</span>
             </div>
             {!offer.links || offer.links.length === 0 ? (
-              <p className="text-xs text-gray-400 italic">No links</p>
+              <p className="text-xs text-gray-400 italic">Ссылки не добавлены</p>
             ) : (
               <div className="border border-gray-200 rounded-lg overflow-hidden">
                 <div className="bg-gray-100 grid grid-cols-2 px-3 py-1.5">
-                  <span className="text-xs font-medium text-[#2300fa]">Link Name</span>
-                  <span className="text-xs font-medium text-[#2300fa]">URL</span>
+                  <span className="text-xs font-medium text-[#2300fa]">Название ссылки</span>
+                  <span className="text-xs font-medium text-[#2300fa]">Ссылка</span>
                 </div>
                 {offer.links.map((link, index) => (
                   <div

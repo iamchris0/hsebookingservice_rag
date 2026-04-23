@@ -119,10 +119,10 @@ export function CourseCard({ course, onEdit, onDelete }: CourseCardProps) {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs mb-0.5" style={{ color: "#2300fa" }}>
-                Assistant
+                Ассистент
               </p>
               <p className={`text-xs ${course.assistantName ? 'text-black font-medium' : 'text-[#ff1ef7]'} leading-tight line-clamp-2`}>
-                {course.assistantName || "No assistant assigned"}
+                {course.assistantName || "Ассистент еще не назначен"}
               </p>
             </div>
           </div>
@@ -136,7 +136,7 @@ export function CourseCard({ course, onEdit, onDelete }: CourseCardProps) {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs mb-0.5" style={{ color: "#2300fa" }}>
-                Faculty
+                Факультет
               </p>
               <p className="text-xs font-medium text-black leading-tight line-clamp-2">{course.faculty}</p>
             </div>
@@ -151,7 +151,7 @@ export function CourseCard({ course, onEdit, onDelete }: CourseCardProps) {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs mb-0.5" style={{ color: "#2300fa" }}>
-                Educational Program
+                Образовательная программа
               </p>
               <p className="text-xs font-medium text-black leading-tight line-clamp-2">{course.program}</p>
             </div>
@@ -166,7 +166,7 @@ export function CourseCard({ course, onEdit, onDelete }: CourseCardProps) {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs mb-0.5" style={{ color: "#2300fa" }}>
-                Number of Groups
+                Кол-во групп
               </p>
               <p className="text-xs font-medium text-black leading-tight">{course.numberOfGroups}</p>
             </div>
@@ -174,7 +174,7 @@ export function CourseCard({ course, onEdit, onDelete }: CourseCardProps) {
   
           <div>
             <p className="text-xs mb-2" style={{ color: "#2300fa" }}>
-              Course Duration
+              Учебные модули
             </p>
             <div className="flex">
               {[1, 2, 3, 4].map((moduleNum, index) => (
@@ -198,7 +198,7 @@ export function CourseCard({ course, onEdit, onDelete }: CourseCardProps) {
             className="w-full h-10 text-sm font-medium bg-transparent border-2 border-blue-600 text-black hover:bg-blue-600 hover:text-white rounded-full transition-colors"
             onClick={() => setDetailsOpen(true)}
           >
-            More Details
+            Подробнее
           </Button>
         </CardFooter>
       </Card>

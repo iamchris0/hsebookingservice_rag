@@ -124,10 +124,10 @@ export function SelectAssistantDialog({
               <div className="border border-gray-200 rounded-lg overflow-hidden">
                 {/* Table Header */}
                 <div className="bg-gray-100 grid grid-cols-[2fr_2fr_1fr_1fr] px-3 py-2">
-                  <span className="text-xs font-medium text-[#2300fa]">Discipline</span>
-                  <span className="text-xs font-medium text-[#2300fa]">Program</span>
-                  <span className="text-xs font-medium text-center text-[#2300fa]">Groups</span>
-                  <span className="text-xs font-medium text-center text-[#2300fa]">Modules</span>
+                  <span className="text-xs font-medium text-[#2300fa]">Дисциплина</span>
+                  <span className="text-xs font-medium text-[#2300fa]">Образовательная программа</span>
+                  <span className="text-xs font-medium text-center text-[#2300fa]">Группы</span>
+                  <span className="text-xs font-medium text-center text-[#2300fa]">Учебные модули</span>
                 </div>
                 
                 {/* Table Body */}
@@ -152,8 +152,8 @@ export function SelectAssistantDialog({
           {hasReachedMax && (
             <div className="bg-red-50 border border-red-100 rounded-lg p-3 text-center">
               <p className="text-red-500 font-medium text-sm">
-                This assistant has reached the maximum of {MAX_ASSIGNMENTS} assignments and cannot be
-                selected for additional courses.
+                Этот ассистент достиг максимального количества {MAX_ASSIGNMENTS} бронирований и не может быть
+                выбран для дополнительных курсов.
               </p>
             </div>
           )}
@@ -166,7 +166,7 @@ export function SelectAssistantDialog({
               {/* Discipline Selection */}
               <div className="mb-3">
                 <h3 className="font-bold text-[#2300fa] text-sm mb-2">
-                  Which discipline do you want to choose?
+                  Какую дисциплину вы хотите выбрать?
                 </h3>
                 <div className="grid grid-cols-2 gap-2">
                   {disciplines.map((discipline) => (
@@ -194,9 +194,9 @@ export function SelectAssistantDialog({
 
               {/* Program Input */}
               <div className="mb-3">
-                <label className="block font-bold text-[#2300fa] text-sm mb-1.5">Select a program</label>
+                <label className="block font-bold text-[#2300fa] text-sm mb-1.5">Выберите образовательную программу</label>
                 <Input
-                  placeholder="Enter program name"
+                  placeholder="Введите название ОП"
                   value={programName}
                   onChange={(e) => setProgramName(e.target.value)}
                   className="bg-gray-100 border-none rounded-lg h-9 text-sm"
@@ -205,7 +205,7 @@ export function SelectAssistantDialog({
 
               {/* Number of Groups */}
               <div className="mb-3">
-                <label className="block font-bold text-[#2300fa] text-sm mb-1.5">Number of groups</label>
+                <label className="block font-bold text-[#2300fa] text-sm mb-1.5">Количество групп</label>
                 <div className="flex gap-2">
                   <button
                     onClick={() => setNumberOfGroups(1)}
@@ -232,7 +232,7 @@ export function SelectAssistantDialog({
 
               {/* Module Selection */}
               <div className="mb-4">
-                <label className="block font-bold text-[#2300fa] text-sm mb-1.5">Select modules</label>
+                <label className="block font-bold text-[#2300fa] text-sm mb-1.5">Выберите учебные модули</label>
                 <div className="flex gap-2">
                   {[1, 2, 3, 4].map((module) => (
                     <button
@@ -256,7 +256,7 @@ export function SelectAssistantDialog({
                 disabled={!selectedDiscipline || !programName || selectedModules.length === 0}
                 className="w-full h-10 rounded-full bg-[#DCFF05] hover:bg-[#c9eb00] text-black font-medium border-2 border-black disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Select
+                Выбрать
               </Button>
             </>
           )}

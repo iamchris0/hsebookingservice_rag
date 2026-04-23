@@ -66,7 +66,7 @@ export function Header() {
         <div className="flex gap-3">
           <Button variant="ghost" size="sm" className="bg-black hover:bg-black/80 text-white">
             <User className="w-4 h-4 mr-2" />
-            Profile
+            Профиль
           </Button>
           <Button 
             variant="ghost" 
@@ -76,7 +76,7 @@ export function Header() {
             disabled={isLoggingOut}
           >
             <LogOut className="w-4 h-4 mr-2" />
-            {isLoggingOut ? 'Logging out...' : 'Log out'}
+            {isLoggingOut ? 'Logging out...' : 'Выход'}
           </Button>
         </div>
       </div>

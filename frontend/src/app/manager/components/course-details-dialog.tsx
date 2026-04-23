@@ -47,7 +47,7 @@ export function CourseDetailsDialog({ course, isOpen, onClose }: CourseDetailsDi
         {/* Header */}
         <div className="px-4 pt-3 pb-2">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-[#2300fa]">Course Details</h2>
+            <h2 className="text-lg font-bold text-[#2300fa]">Подробности заявки</h2>
             <button
               onClick={onClose}
               className="p-1 hover:bg-gray-100 rounded-full transition-colors"
@@ -65,14 +65,14 @@ export function CourseDetailsDialog({ course, isOpen, onClose }: CourseDetailsDi
             <div>
               <div className="flex items-center gap-1.5 mb-1">
                 <Tag className="w-3.5 h-3.5 text-[#2300fa]" />
-                <span className="text-xs font-bold text-[#2300fa]">Discipline</span>
+                <span className="text-xs font-bold text-[#2300fa]">Дисциплина</span>
               </div>
               <p className="text-sm text-black bg-gray-100 rounded-lg px-3 py-2">{course.discipline}</p>
             </div>
             <div>
               <div className="flex items-center gap-1.5 mb-1">
                 <GraduationCap className="w-3.5 h-3.5 text-[#2300fa]" />
-                <span className="text-xs font-bold text-[#2300fa]">Teacher</span>
+                <span className="text-xs font-bold text-[#2300fa]">Преподаватель</span>
               </div>
               <p className="text-sm text-black bg-gray-100 rounded-lg px-3 py-2">{course.teacherName}</p>
             </div>
@@ -82,10 +82,10 @@ export function CourseDetailsDialog({ course, isOpen, onClose }: CourseDetailsDi
           <div>
             <div className="flex items-center gap-1.5 mb-1">
               <Users className="w-3.5 h-3.5 text-[#2300fa]" />
-              <span className="text-xs font-bold text-[#2300fa]">Assistant</span>
+              <span className="text-xs font-bold text-[#2300fa]">Ассистент</span>
             </div>
             <p className={`text-sm bg-gray-100 rounded-lg px-3 py-2 ${course.assistantName ? "text-black" : "text-[#ff1ef7]"}`}>
-              {course.assistantName || "No assistant assigned"}
+              {course.assistantName || "Ассистент не назначен"}
             </p>
           </div>
 
@@ -94,14 +94,14 @@ export function CourseDetailsDialog({ course, isOpen, onClose }: CourseDetailsDi
             <div>
               <div className="flex items-center gap-1.5 mb-1">
                 <GraduationCap className="w-3.5 h-3.5 text-[#2300fa]" />
-                <span className="text-xs font-bold text-[#2300fa]">Faculty</span>
+                <span className="text-xs font-bold text-[#2300fa]">Факультет</span>
               </div>
               <p className="text-sm text-black bg-gray-100 rounded-lg px-3 py-2">{course.faculty}</p>
             </div>
             <div>
               <div className="flex items-center gap-1.5 mb-1">
                 <BookOpen className="w-3.5 h-3.5 text-[#2300fa]" />
-                <span className="text-xs font-bold text-[#2300fa]">Educational Program</span>
+                <span className="text-xs font-bold text-[#2300fa]">Образовательная программа</span>
               </div>
               <p className="text-sm text-black bg-gray-100 rounded-lg px-3 py-2">{course.program}</p>
             </div>
@@ -112,14 +112,14 @@ export function CourseDetailsDialog({ course, isOpen, onClose }: CourseDetailsDi
             <div style={{ flex: "0 0 20%" }}>
               <div className="flex items-center gap-1.5 mb-1">
                 <UsersRound className="w-3.5 h-3.5 text-[#2300fa]" />
-                <span className="text-xs font-bold text-[#2300fa]">Groups</span>
+                <span className="text-xs font-bold text-[#2300fa]">Группы</span>
               </div>
               <div className="h-9 flex items-center justify-center text-sm font-semibold bg-gray-100 rounded-lg">
                 {course.numberOfGroups}
               </div>
             </div>
             <div style={{ flex: "0 0 calc(80% - 0.75rem)" }}>
-              <p className="text-xs font-bold text-[#2300fa] mb-1">Course Duration</p>
+              <p className="text-xs font-bold text-[#2300fa] mb-1">Продолжительность курса</p>
               <div className="flex">
                 {[1, 2, 3, 4].map((moduleNum, index) => (
                   <div
@@ -140,15 +140,15 @@ export function CourseDetailsDialog({ course, isOpen, onClose }: CourseDetailsDi
           <div>
             <div className="flex items-center gap-1.5 mb-1.5">
               <LinkIcon className="w-3.5 h-3.5 text-[#2300fa]" />
-              <span className="text-xs font-bold text-[#2300fa]">Links</span>
+              <span className="text-xs font-bold text-[#2300fa]">Ссылки</span>
             </div>
             {!course.links || course.links.length === 0 ? (
-              <p className="text-xs text-gray-400 italic">No links</p>
+              <p className="text-xs text-gray-400 italic">Ссылки не добавлены</p>
             ) : (
               <div className="border border-gray-200 rounded-lg overflow-hidden">
                 <div className="bg-gray-100 grid grid-cols-2 px-3 py-1.5">
-                  <span className="text-xs font-medium text-[#2300fa]">Link Name</span>
-                  <span className="text-xs font-medium text-[#2300fa]">URL</span>
+                  <span className="text-xs font-medium text-[#2300fa]">Название ссылки</span>
+                  <span className="text-xs font-medium text-[#2300fa]">Ссылка</span>
                 </div>
                 {course.links.map((link, index) => (
                   <div

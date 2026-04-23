@@ -223,7 +223,7 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
         {/* Header */}
         <div className="px-4 pt-3 pb-2">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-[#2300fa]">{editData ? "Edit Course" : "Add New Course"}</h2>
+            <h2 className="text-lg font-bold text-[#2300fa]">{editData ? "Редактировать курс" : "Новая заявка"}</h2>
             <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-full transition-colors">
               <X className="w-5 h-5 text-[#2300fa]" />
             </button>
@@ -236,7 +236,7 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
 
           {/* 1. Discipline */}
           <div className="mb-3">
-            <h3 className="font-bold text-[#2300fa] text-sm mb-2">Discipline</h3>
+            <h3 className="font-bold text-[#2300fa] text-sm mb-2">Дисциплина</h3>
             <div className="grid grid-cols-2 gap-2">
               {disciplines.map((discipline) => (
                 <label
@@ -262,9 +262,9 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
 
           {/* 2. Teacher */}
           <div className="mb-3 relative" ref={teacherRef}>
-            <label className="block font-bold text-[#2300fa] text-sm mb-1.5">Teacher</label>
+            <label className="block font-bold text-[#2300fa] text-sm mb-1.5">Преподаватель</label>
             <Input
-              placeholder="Search or type teacher name..."
+              placeholder="Поиск или введите имя преподавателя..."
               value={teacherSearch}
               onChange={(e) => {
                 setTeacherSearch(e.target.value)
@@ -294,9 +294,9 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
 
           {/* 3. Faculty — free-text with suggestions */}
           <div className="mb-3 relative" ref={facultyRef}>
-            <label className="block font-bold text-[#2300fa] text-sm mb-1.5">Faculty</label>
+            <label className="block font-bold text-[#2300fa] text-sm mb-1.5">Факультет</label>
             <Input
-              placeholder="Type or select faculty..."
+              placeholder="Введите или выберите факультет..."
               value={facultyValue}
               onChange={(e) => {
                 setFacultyValue(e.target.value)
@@ -324,9 +324,9 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
 
           {/* 4. Program — free-text with suggestions filtered by faculty */}
           <div className="mb-3 relative" ref={programRef}>
-            <label className="block font-bold text-[#2300fa] text-sm mb-1.5">Educational Program</label>
+            <label className="block font-bold text-[#2300fa] text-sm mb-1.5">Образовательная программа</label>
             <Input
-              placeholder="Type or select program..."
+              placeholder="Введите или выберите образовательную программу..."
               value={programValue}
               onChange={(e) => {
                 setProgramValue(e.target.value)
@@ -354,11 +354,11 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
 
           {/* 5. Number of Groups */}
           <div className="mb-3">
-            <label className="block font-bold text-[#2300fa] text-sm mb-1.5">Number of Groups</label>
+            <label className="block font-bold text-[#2300fa] text-sm mb-1.5">Количество групп</label>
             <Input
               type="number"
               min="1"
-              placeholder="Enter number"
+              placeholder="Введите количество групп"
               value={numberOfGroups}
               onChange={(e) => setNumberOfGroups(e.target.value.replace(/\D/g, ""))}
               className="bg-gray-100 border-none rounded-lg h-9 text-sm w-32"
@@ -367,7 +367,7 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
 
           {/* 6. Course Duration (Modules) */}
           <div className="mb-3">
-            <label className="block font-bold text-[#2300fa] text-sm mb-1.5">Course Duration (modules)</label>
+            <label className="block font-bold text-[#2300fa] text-sm mb-1.5">Продолжительность курса (модули)</label>
             <div className="flex gap-2">
               {modules.map((module) => (
                 <button
@@ -388,22 +388,22 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
           {/* 7. Links Table */}
           <div className="mb-4">
             <div className="flex items-center justify-between mb-1.5">
-              <label className="block font-bold text-[#2300fa] text-sm">Links</label>
+              <label className="block font-bold text-[#2300fa] text-sm">Ссылки</label>
               <button
                 onClick={addLinkRow}
                 className="flex items-center gap-1 text-xs font-medium text-[#2300fa] hover:text-[#1a00c0] transition-colors"
               >
                 <Plus className="w-3.5 h-3.5" />
-                Add link
+                Добавить ссылку
               </button>
             </div>
             {links.length === 0 ? (
-              <p className="text-xs text-gray-400 italic">No links added yet</p>
+              <p className="text-xs text-gray-400 italic">Ссылки не добавлены</p>
             ) : (
               <div className="border border-gray-200 rounded-lg overflow-hidden">
                 <div className="bg-gray-100 grid grid-cols-[1fr_1fr_32px] px-3 py-1.5">
-                  <span className="text-xs font-medium text-[#2300fa]">Link Name</span>
-                  <span className="text-xs font-medium text-[#2300fa]">URL</span>
+                  <span className="text-xs font-medium text-[#2300fa]">Название ссылки</span>
+                  <span className="text-xs font-medium text-[#2300fa]">Ссылка</span>
                   <span />
                 </div>
                 {links.map((link, index) => (
@@ -412,13 +412,13 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
                     className="grid grid-cols-[1fr_1fr_32px] gap-2 px-3 py-1.5 border-t border-gray-100 items-center"
                   >
                     <Input
-                      placeholder="Name"
+                      placeholder="Курс LMS"
                       value={link.name}
                       onChange={(e) => updateLink(index, "name", e.target.value)}
                       className="bg-gray-50 border-none rounded-md h-8 text-xs"
                     />
                     <Input
-                      placeholder="https://..."
+                      placeholder="https://edu.hse.ru/course/..."
                       value={link.url}
                       onChange={(e) => updateLink(index, "url", e.target.value)}
                       className="bg-gray-50 border-none rounded-md h-8 text-xs"
@@ -441,7 +441,7 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
             disabled={isConfirmDisabled}
             className="w-full h-10 rounded-full bg-[#DCFF05] hover:bg-[#c9eb00] text-black font-medium border-2 border-black disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {editData ? "Save Changes" : "Confirm"}
+            {editData ? "Сохранить изменения" : "Подтвердить"}
           </Button>
         </div>
       </div>

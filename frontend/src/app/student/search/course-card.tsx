@@ -35,7 +35,7 @@ export function CourseCard({
             <GraduationCap className="h-4 w-4 text-black" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs mb-0.5" style={{ color: "#2300fa" }}>Discipline</p>
+            <p className="text-xs mb-0.5" style={{ color: "#2300fa" }}>Дисциплина</p>
             <p className="text-xs text-black leading-tight line-clamp-2">{discipline}</p>
           </div>
         </div>
@@ -48,7 +48,7 @@ export function CourseCard({
             <Mail className="h-4 w-4 text-black" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs mb-0.5" style={{ color: "#2300fa" }}>Contacts</p>
+            <p className="text-xs mb-0.5" style={{ color: "#2300fa" }}>Контакты преподавателя</p>
             <p className="text-xs text-black leading-tight line-clamp-2">{email}</p>
           </div>
         </div>
@@ -61,7 +61,7 @@ export function CourseCard({
             <BookOpen className="h-4 w-4 text-black" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs mb-0.5" style={{ color: "#2300fa" }}>Program</p>
+            <p className="text-xs mb-0.5" style={{ color: "#2300fa" }}>Образовательная программа</p>
             <p className="text-xs font-medium text-black leading-tight line-clamp-2">{program}</p>
           </div>
         </div>
@@ -102,7 +102,7 @@ export function CourseCard({
             className="flex-1 rounded-full border-[#000000] bg-[#DCFF05] hover:bg-[#c9eb00] text-black text-sm h-9"
             onClick={() => setIsSelected(true)}
           >
-            Select
+            Выбрать курс
           </Button>
         </div>
 

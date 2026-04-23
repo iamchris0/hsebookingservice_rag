@@ -1,129 +1,156 @@
 "use client"
 
 import { useState } from "react"
-import { Card } from "@/components/ui/card"
+import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Star, GraduationCap, BookOpen, Mail } from "lucide-react"
+import { Star, GraduationCap, BookOpen, Mail, Send } from "lucide-react"
 import { SelectAssistantDialog } from "./select-assistant-dialog"
+import { Assistant } from "../types"
 
-interface Skill {
-  number: number
-  name: string
+type AssistantCardProps = Assistant
+
+interface InfoRowProps {
+  icon: React.ReactNode
+  label: string
+  value: string
 }
 
-interface Assignment {
-  discipline: string
-  program: string
-  groups: number
+function InfoRow({ icon, label, value }: InfoRowProps) {
+  return (
+    <div className="flex items-start gap-2">
+      <div
+        className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
+        style={{ backgroundColor: "#DCFF05" }}
+      >
+        {icon}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[10px] mb-0.5" style={{ color: "#2300fa" }}>
+          {label}
+        </p>
+        <p className="text-xs font-medium text-black leading-tight line-clamp-2">{value || "—"}</p>
+      </div>
+    </div>
+  )
 }
 
-interface AssistantCardProps {
-  id: string
-  name: string
-  skills: Skill[]
-  faculty: string
-  trainingProgram: string
-  email: string
-  isFavorite?: boolean
-  currentAssignments?: Assignment[]
-}
-
-export function AssistantCard({ 
-  name, 
-  skills, 
-  faculty, 
-  trainingProgram, 
+export function AssistantCard({
+  name,
+  skills,
+  faculty,
+  trainingProgram,
   email,
-  isFavorite = false,
-  currentAssignments = []
+  telegram,
+  isFavorite,
+  currentAssignments,
 }: AssistantCardProps) {
   const [favorite, setFavorite] = useState(isFavorite)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
 
   return (
-    <Card className="bg-white shadow-sm hover:shadow-md transition-shadow p-4 flex flex-col">
-      {/* Header: Name and Favorite */}
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="font-bold text-base text-black">{name}</h3>
-        <button 
-          onClick={() => setFavorite(!favorite)}
-          className="p-1 hover:bg-gray-100 rounded-full transition-colors"
-        >
-          <Star 
-            className={`w-5 h-5 ${favorite ? 'fill-[#ff1ef7] text-[#ff1ef7]' : 'text-gray-300'}`} 
-          />
-        </button>
-      </div>
+    <>
+      <Card className="bg-white shadow-sm hover:shadow-lg transition-shadow duration-300 border border-gray-100 rounded-2xl overflow-hidden flex flex-col">
+        <CardContent className="px-4 pt-4 flex-1 space-y-3">
 
-      {/* Skills Box */}
-      <div className="bg-gray-100 rounded-lg p-3 mb-3">
-        {skills.map((skill, index) => (
-          <div key={skill.number}>
-            <div className="flex items-center gap-3">
-              <div className="w-7 h-7 rounded-full bg-[#DCFF05] flex items-center justify-center flex-shrink-0">
-                <span className="text-sm font-bold text-black">{skill.number}</span>
+          {/* 1. Name + Star */}
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="font-bold text-base text-black leading-tight">{name}</h3>
+            <button
+              onClick={() => setFavorite(!favorite)}
+              className="p-1 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0"
+            >
+              <Star
+                className={`w-5 h-5 ${favorite ? "fill-[#ff1ef7] text-[#ff1ef7]" : "text-gray-300"}`}
+              />
+            </button>
+          </div>
+
+          {/* 2. Priorities block */}
+          <div className="bg-gray-100 rounded-xl p-3 space-y-2">
+            {skills.map((skill, index) => (
+              <div key={skill.number}>
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full bg-[#DCFF05] flex items-center justify-center flex-shrink-0">
+                    <span className="text-xs font-bold text-black">{skill.number}</span>
+                  </div>
+                  <span className="text-sm text-black leading-tight">
+                    {skill.name !== "—" && skill.groups != null
+                      ? `${skill.name} (${skill.groups} гр.)`
+                      : skill.name}
+                  </span>
+                </div>
+                {index < skills.length - 1 && (
+                  <div className="border-b border-gray-300 mt-2 ml-8" />
+                )}
               </div>
-              <span className="text-sm font-medium text-black">{skill.name}</span>
+            ))}
+          </div>
+
+          {/* 3. Faculty */}
+          <InfoRow
+            icon={<GraduationCap className="h-3.5 w-3.5 text-black" />}
+            label="Факультет"
+            value={faculty}
+          />
+
+          {/* 4. Educational program */}
+          <InfoRow
+            icon={<BookOpen className="h-3.5 w-3.5 text-black" />}
+            label="Образовательная программа"
+            value={trainingProgram}
+          />
+
+          {/* 5. Contact table: mail | telegram */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex items-start gap-1.5 min-w-0">
+              <div
+                className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
+                style={{ backgroundColor: "#DCFF05" }}
+              >
+                <Mail className="h-3.5 w-3.5 text-black" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] mb-0.5" style={{ color: "#2300fa" }}>Почта</p>
+                <p className="text-xs font-medium text-black truncate">{email || "—"}</p>
+              </div>
             </div>
-            {index < skills.length - 1 && (
-              <div className="border-b border-gray-300 my-2 ml-10" />
-            )}
-          </div>
-        ))}
-      </div>
 
-      {/* Info Sections */}
-      <div className="space-y-2 flex-1">
-        {/* Faculty */}
-        <div className="flex items-center gap-3 h-12">
-          <div className="w-8 h-8 rounded-full bg-[#DCFF05] flex items-center justify-center flex-shrink-0">
-            <GraduationCap className="w-4 h-4 text-black" />
+            <div className="flex items-start gap-1.5 min-w-0">
+              <div
+                className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
+                style={{ backgroundColor: "#DCFF05" }}
+              >
+                <Send className="h-3.5 w-3.5 text-black" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] mb-0.5" style={{ color: "#2300fa" }}>Телеграм</p>
+                <p className="text-xs font-medium text-black truncate">{telegram || "—"}</p>
+              </div>
+            </div>
           </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs text-[#2300fa]">Faculty of Education</p>
-            <p className="text-sm font-medium text-black truncate">{faculty}</p>
-          </div>
-        </div>
 
-        {/* Training Program */}
-        <div className="flex items-center gap-3 h-12">
-          <div className="w-8 h-8 rounded-full bg-[#DCFF05] flex items-center justify-center flex-shrink-0">
-            <BookOpen className="w-4 h-4 text-black" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs text-[#2300fa]">Training Program</p>
-            <p className="text-sm font-medium text-black truncate">{trainingProgram}</p>
-          </div>
-        </div>
+        </CardContent>
 
-        {/* Contacts */}
-        <div className="flex items-center gap-3 h-12">
-          <div className="w-8 h-8 rounded-full bg-[#DCFF05] flex items-center justify-center flex-shrink-0">
-            <Mail className="w-4 h-4 text-black" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs text-[#2300fa]">Contacts</p>
-            <p className="text-sm font-medium text-black truncate">{email}</p>
-          </div>
-        </div>
-      </div>
+        <div className="mx-4 h-px bg-gray-100" />
 
-      {/* Buttons */}
-      <div className="flex gap-2 mt-4">
-        <Button 
-          variant="outline" 
-          className="flex-1 rounded-full border-[#2300fa] text-[#2300fa] bg-transparent hover:bg-blue-50 text-sm h-9"
-        >
-          Learn More
-        </Button>
-        <Button 
-          variant="outline" 
-          className="flex-1 rounded-full border-[#000000] bg-[#DCFF05] hover:bg-[#c9eb00] text-black text-sm h-9"
-          onClick={() => setIsDialogOpen(true)}
-        >
-          Select
-        </Button>
-      </div>
+        <CardFooter className="px-4">
+          <div className="flex gap-2 w-full">
+            <Button
+              variant="outline"
+              className="flex-1 rounded-full border-[#2300fa] text-[#2300fa] bg-transparent hover:bg-blue-50 text-sm h-9"
+            >
+              Подробнее
+            </Button>
+            <Button
+              variant="outline"
+              className="flex-1 rounded-full border-black bg-[#DCFF05] hover:bg-[#c9eb00] text-black text-sm h-9"
+              onClick={() => setIsDialogOpen(true)}
+            >
+              Выбрать
+            </Button>
+          </div>
+        </CardFooter>
+      </Card>
 
       <SelectAssistantDialog
         isOpen={isDialogOpen}
@@ -131,6 +158,6 @@ export function AssistantCard({
         assistantName={name}
         currentAssignments={currentAssignments}
       />
-    </Card>
+    </>
   )
 }

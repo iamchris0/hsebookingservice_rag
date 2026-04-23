@@ -1,144 +1,122 @@
 "use client"
 
+import { useState, useEffect } from "react"
+import { Users } from "lucide-react"
+import { Input } from "@/components/ui/input"
 import { AssistantCard } from "./assistant-card"
-import { GroupFilters } from "../components/group-filters"
+import { Assistant, StudentSearchResult } from "../types"
 
-const mockAssistants = [
-  {
-    id: "1",
-    name: "Johnson Emily",
-    skills: [
-      { number: 1, name: "Python" },
-      { number: 2, name: "-" },
-    ],
-    faculty: "Faculty of Computer Science",
-    trainingProgram: "Advanced Programming and AI",
-    email: "emily.johnson@university.edu",
-    isFavorite: false,
-    currentAssignments: [
-      { discipline: "Python", program: "CS101", groups: 2, modules: [1, 2] },
-      { discipline: "Data Analysis", program: "STAT202", groups: 1, modules: [3, 4] },
-    ],
-  },
-  {
-    id: "2",
-    name: "Chen Michael",
-    skills: [
-      { number: 1, name: "Machine Learning" },
-      { number: 2, name: "-" },
-    ],
-    faculty: "Faculty of Data Science",
-    trainingProgram: "AI and Machine Learning",
-    email: "m.chen@university.edu",
-    isFavorite: true,
-    currentAssignments: [
-      { discipline: "Machine Learning", program: "AI303", groups: 1, modules: [1] },
-      { discipline: "Python", program: "CS102", groups: 2, modules: [2, 3] },
-      { discipline: "Mathematics", program: "MATH201", groups: 1, modules: [3, 4] },
-      { discipline: "Data Analysis", program: "STAT301", groups: 2, modules: [1, 2] },
-    ],
-  },
-  {
-    id: "3",
-    name: "Martinez Sarah",
-    skills: [
-      { number: 1, name: "Web Development" },
-      { number: 2, name: "React" },
-    ],
-    faculty: "Faculty of Engineering",
-    trainingProgram: "Software Engineering",
-    email: "sarah.m@university.edu",
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001"
+
+function mapStudent(student: StudentSearchResult): Assistant {
+  const filledPrefs = [...student.preferences.slice(0, 2)]
+  while (filledPrefs.length < 2) {
+    filledPrefs.push({ priority: filledPrefs.length + 1, discipline: "—", desired_group_size: null })
+  }
+
+  return {
+    id: String(student.id),
+    name: `${student.last_name} ${student.first_name}`,
+    skills: filledPrefs.map((p) => ({
+      number: p.priority,
+      name: p.discipline,
+      groups: p.desired_group_size,
+    })),
+    faculty: student.edu_faculty ?? "—",
+    trainingProgram: student.edu_program ?? "—",
+    email: student.email,
+    telegram: student.telegram,
     isFavorite: false,
     currentAssignments: [],
-  },
-  {
-    id: "4",
-    name: "Williams David",
-    skills: [
-      { number: 1, name: "Statistics" },
-      { number: 2, name: "R Programming" },
-    ],
-    faculty: "Faculty of Mathematics",
-    trainingProgram: "Applied Statistics",
-    email: "d.williams@university.edu",
-    isFavorite: false,
-    currentAssignments: [
-      { discipline: "Mathematics", program: "MATH101", groups: 1, modules: [1, 2, 3] },
-    ],
-  },
-  {
-    id: "5",
-    name: "Brown Jessica",
-    skills: [
-      { number: 1, name: "Database Design" },
-      { number: 2, name: "SQL" },
-    ],
-    faculty: "Faculty of Information Systems",
-    trainingProgram: "Database Management",
-    email: "j.brown@university.edu",
-    isFavorite: true,
-    currentAssignments: [
-      { discipline: "Python", program: "CS201", groups: 2, modules: [1, 2] },
-      { discipline: "Data Analysis", program: "STAT101", groups: 1, modules: [2, 3] },
-      { discipline: "Machine Learning", program: "AI201", groups: 2, modules: [3, 4] },
-    ],
-  },
-  {
-    id: "6",
-    name: "Taylor Robert",
-    skills: [
-      { number: 1, name: "Cybersecurity" },
-      { number: 2, name: "Network Security" },
-    ],
-    faculty: "Faculty of Computer Science",
-    trainingProgram: "Information Security",
-    email: "r.taylor@university.edu",
-    isFavorite: false,
-    currentAssignments: [],
-  },
-  {
-    id: "7",
-    name: "Anderson Lisa",
-    skills: [
-      { number: 1, name: "UI/UX Design" },
-      { number: 2, name: "Figma" },
-    ],
-    faculty: "Faculty of Design",
-    trainingProgram: "Digital Design",
-    email: "l.anderson@university.edu",
-    isFavorite: false,
-    currentAssignments: [],
-  },
-  {
-    id: "8",
-    name: "Thomas James",
-    skills: [
-      { number: 1, name: "Cloud Computing" },
-      { number: 2, name: "AWS" },
-    ],
-    faculty: "Faculty of Engineering",
-    trainingProgram: "Cloud Architecture",
-    email: "j.thomas@university.edu",
-    isFavorite: true,
-    currentAssignments: [
-      { discipline: "Python", program: "CS301", groups: 1, modules: [1, 2] },
-      { discipline: "Machine Learning", program: "AI401", groups: 2, modules: [2, 3, 4] },
-    ],
-  },
-]
+  }
+}
 
 export function AssistantSearchSection() {
+  const [students, setStudents] = useState<Assistant[]>([])
+  const [nameFilter, setNameFilter] = useState("")
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchStudents = async () => {
+      try {
+        const token = localStorage.getItem("token")
+        const response = await fetch(`${BACKEND_URL}/api/teacher/search`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+
+        if (!response.ok) {
+          throw new Error("Не удалось загрузить список ассистентов")
+        }
+
+        const data: StudentSearchResult[] = await response.json()
+        setStudents(data.map(mapStudent))
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Ошибка загрузки")
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchStudents()
+  }, [])
+
+  const filtered = students.filter((s) =>
+    nameFilter ? s.name.toLowerCase().includes(nameFilter.toLowerCase()) : true
+  )
+
+  const filtersActive = nameFilter.trim().length > 0
+
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-bold text-foreground">Поиск асситента</h1>
+      <h1 className="text-3xl font-bold text-foreground">Поиск ассистента</h1>
 
-      <GroupFilters />
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {mockAssistants.map((assistant) => (
-          <AssistantCard key={assistant.id} {...assistant} />
-        ))}
+      <div className="flex flex-wrap items-center gap-3">
+        <Input
+          placeholder="Поиск по ФИО..."
+          className="w-[220px] bg-white rounded-full border-border"
+          value={nameFilter}
+          onChange={(e) => setNameFilter(e.target.value)}
+        />
       </div>
+
+      {isLoading ? (
+        <div className="flex items-center justify-center py-20">
+          <div className="flex flex-col items-center gap-3">
+            <div
+              className="w-8 h-8 rounded-full border-[3px] animate-spin"
+              style={{ borderColor: "#2300fa", borderTopColor: "transparent" }}
+            />
+            <span className="text-sm text-gray-400">Загрузка...</span>
+          </div>
+        </div>
+      ) : error ? (
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <p className="text-sm font-medium text-red-500">{error}</p>
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-24 text-center gap-4">
+          <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center">
+            <Users className="w-8 h-8 text-gray-300" />
+          </div>
+          <div>
+            <p className="text-base font-semibold text-black">
+              {filtersActive ? "Никого не найдено" : "Пока нет зарегистрированных ассистентов"}
+            </p>
+            <p className="text-sm text-gray-400 mt-1">
+              {filtersActive
+                ? "Попробуйте изменить поисковый запрос"
+                : "Как только студенты зарегистрируются, они появятся здесь"}
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {filtered.map((assistant) => (
+            <AssistantCard key={assistant.id} {...assistant} />
+          ))}
+        </div>
+      )}
     </div>
   )
 }

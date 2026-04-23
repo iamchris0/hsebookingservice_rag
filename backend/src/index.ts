@@ -780,6 +780,125 @@ app.patch<{ Params: { bookingId: string } }>(
   }
 );
 
+// GET /api/teacher/search — students with their preferences and active assignment count
+app.get(
+  "/api/teacher/search",
+  { preHandler: [app.authenticate] },
+  async (request, reply) => {
+    const user = request.user as { id: number; role: string };
+    if (user.role !== "teacher") {
+      return reply.code(403).send({ error: "Forbidden" });
+    }
+
+    const client = await app.pg.connect();
+    try {
+      const result = await client.query(
+        `SELECT
+           u.id,
+           u.first_name,
+           u.last_name,
+           u.email,
+           sp.study_year,
+           sp.edu_faculty,
+           sp.edu_program,
+           sp.telegram,
+           COALESCE((
+             SELECT json_agg(json_build_object(
+               'priority', spr.priority,
+               'discipline', d.name,
+               'desired_group_size', spr.desired_group_size
+             ) ORDER BY spr.priority)
+             FROM dc_new.student_preferences spr
+             JOIN dc_new.disciplines d ON d.id = spr.discipline_id
+             WHERE spr.student_id = u.id
+           ), '[]'::json) AS preferences,
+           COALESCE((
+             SELECT COUNT(*)
+             FROM dc_new.bookings b
+             WHERE b.student_id = u.id AND b.status = 'active'
+           ), 0)::int AS active_assignments
+         FROM dc_new.users u
+         LEFT JOIN dc_new.student_profiles sp ON sp.user_id = u.id
+         WHERE u.role = 'student'
+         ORDER BY u.last_name, u.first_name`
+      );
+      return result.rows;
+    } finally {
+      client.release();
+    }
+  }
+);
+
+// POST /api/teacher/assign — teacher assigns a student assistant to their offer
+app.post<{
+  Body: { offerId: number; studentId: number; numGroups: number };
+}>(
+  "/api/teacher/assign",
+  { preHandler: [app.authenticate] },
+  async (request, reply) => {
+    const user = request.user as { id: number; role: string };
+    if (user.role !== "teacher") {
+      return reply.code(403).send({ error: "Forbidden" });
+    }
+
+    const { offerId, studentId, numGroups } = request.body;
+
+    if (!offerId || !studentId || !numGroups) {
+      return reply.code(400).send({ error: "Некорректные данные запроса" });
+    }
+
+    const groups = Number(numGroups);
+    if (groups < 1 || groups > 4) {
+      return reply.code(400).send({ error: "Количество групп должно быть от 1 до 4" });
+    }
+
+    const client = await app.pg.connect();
+    try {
+      // Verify offer belongs to this teacher and is open
+      const offerResult = await client.query(
+        `SELECT co.id, co.total_groups,
+           COALESCE((
+             SELECT SUM(COALESCE(b.num_groups, 1))
+             FROM dc_new.bookings b
+             WHERE b.offer_id = co.id AND b.status IN ('active', 'pending')
+           ), 0) AS booked_count
+         FROM dc_new.course_offers co
+         WHERE co.id = $1 AND co.teacher_id = $2 AND co.status = 'open'`,
+        [offerId, user.id]
+      );
+
+      if (offerResult.rows.length === 0) {
+        return reply.code(404).send({ error: "Предложение не найдено" });
+      }
+
+      const offer = offerResult.rows[0];
+      const available = Number(offer.total_groups) - Number(offer.booked_count);
+
+      if (groups > available) {
+        return reply.code(409).send({ error: `Доступно только ${available} групп(ы)` });
+      }
+
+      const insertResult = await client.query(
+        `INSERT INTO dc_new.bookings
+           (offer_id, student_id, payment_type, num_groups, status, created_by_teacher_id)
+         VALUES ($1, $2, 'money', $3, 'active', $4)
+         RETURNING id`,
+        [offerId, studentId, groups, user.id]
+      );
+
+      return reply.code(201).send({ bookingId: insertResult.rows[0].id });
+    } catch (error: unknown) {
+      const pgError = error as { code?: string };
+      if (pgError.code === "23505") {
+        return reply.code(409).send({ error: "Студент уже назначен на это предложение" });
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+);
+
 // ─── Error handling ────────────────────────────────────────────────────────────
 
 app.setErrorHandler((error, _request, reply) => {
