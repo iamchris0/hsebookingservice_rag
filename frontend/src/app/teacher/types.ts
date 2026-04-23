@@ -37,10 +37,12 @@ export interface DisciplineStat {
 
 export interface TeacherBooking {
   booking_id: number
+  status: "pending" | "active"
   payment_type: "money" | "credits"
   student_first_name: string
   student_last_name: string
   student_email: string
+  student_telegram?: string | null
 }
 
 export interface TeacherOffer {

@@ -113,6 +113,7 @@ export function CourseCard({
           teacherName={teacherName}
           discipline={discipline}
           program={program}
+          availableGroups={availableGroups}
         />
       </CardContent>
     </Card>

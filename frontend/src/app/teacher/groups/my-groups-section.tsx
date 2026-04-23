@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { toast } from "sonner"
 import { GroupCard } from "./group-card"
 import { GroupDetailsDialog } from "./group-details-dialog"
 import { CollapsibleSection } from "./collapsible-section"
@@ -16,35 +17,53 @@ export function MyGroupsSection() {
   const [isLoading, setIsLoading] = useState(true)
   const [selectedItem, setSelectedItem] = useState<SelectedItem>(null)
 
-  useEffect(() => {
-    const fetchGroups = async () => {
-      try {
-        const token = localStorage.getItem("token")
-        const response = await fetch(`${BACKEND_URL}/api/teacher/groups`, {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-        if (!response.ok) return
-        const raw: TeacherOffer[] = await response.json()
-        const mapped = raw.map((o) => ({
-          ...o,
-          discipline: toDisplayDiscipline(o.discipline),
-        }))
-        setOffers(mapped)
-      } catch {
-        // fail silently
-      } finally {
-        setIsLoading(false)
-      }
+  const fetchGroups = async () => {
+    try {
+      const token = localStorage.getItem("token")
+      const response = await fetch(`${BACKEND_URL}/api/teacher/groups`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!response.ok) return
+      const raw: TeacherOffer[] = await response.json()
+      const mapped = raw.map((o) => ({
+        ...o,
+        discipline: toDisplayDiscipline(o.discipline),
+      }))
+      setOffers(mapped)
+    } catch {
+      // fail silently
+    } finally {
+      setIsLoading(false)
     }
-    fetchGroups()
-  }, [])
+  }
+
+  useEffect(() => { fetchGroups() }, [])
+
+  const handleAccept = async (bookingId: number) => {
+    try {
+      const token = localStorage.getItem("token")
+      const response = await fetch(
+        `${BACKEND_URL}/api/teacher/bookings/${bookingId}/accept`,
+        { method: "PATCH", headers: { Authorization: `Bearer ${token}` } }
+      )
+      if (response.ok) {
+        await fetchGroups()
+        toast.success("Ассистент успешно назначен!")
+      }
+    } catch {
+      // fail silently
+    }
+  }
 
   // Offers with no bookings yet → "groups without assistant"
   const withoutAssistant = offers.filter((o) => o.bookings.length === 0)
-  // All bookings across offers → "my groups"
-  const myGroupItems = offers.flatMap((o) =>
-    o.bookings.map((b: TeacherBooking) => ({ offer: o, booking: b }))
-  )
+  // All bookings across offers → "my groups", pending first then active
+  const myGroupItems = offers
+    .flatMap((o) => o.bookings.map((b: TeacherBooking) => ({ offer: o, booking: b })))
+    .sort((a, b) => {
+      if (a.booking.status === b.booking.status) return 0
+      return a.booking.status === "pending" ? -1 : 1
+    })
 
   return (
     <div className="space-y-6">
@@ -111,8 +130,11 @@ export function MyGroupsSection() {
                     studentFirstName={booking.student_first_name}
                     studentLastName={booking.student_last_name}
                     studentEmail={booking.student_email}
+                    studentTelegram={booking.student_telegram ?? undefined}
                     paymentType={booking.payment_type}
+                    bookingStatus={booking.status}
                     onMoreDetails={() => setSelectedItem({ offer, booking })}
+                    onAccept={() => handleAccept(booking.booking_id)}
                   />
                 ))}
               </div>

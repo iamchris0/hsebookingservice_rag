@@ -346,7 +346,6 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
                     }`}
                   >
                     <span>{program.name}</span>
-                    <span className="text-xs text-gray-400 ml-2">{program.faculty_name}</span>
                   </button>
                 ))}
               </div>

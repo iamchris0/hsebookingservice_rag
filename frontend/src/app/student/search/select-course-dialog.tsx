@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { CheckCircle2, DollarSign, CreditCard } from "lucide-react"
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001"
+const MAX_GROUPS_PER_STUDENT = 4
 
 interface SelectCourseDialogProps {
   isOpen: boolean
@@ -14,6 +15,7 @@ interface SelectCourseDialogProps {
   teacherName: string
   discipline: string
   program: string
+  availableGroups: number
 }
 
 export function SelectCourseDialog({
@@ -23,11 +25,15 @@ export function SelectCourseDialog({
   teacherName,
   discipline,
   program,
+  availableGroups,
 }: SelectCourseDialogProps) {
   const [paymentType, setPaymentType] = useState<"money" | "credits">("money")
+  const [numGroups, setNumGroups] = useState(1)
   const [confirmed, setConfirmed] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+
+  const maxSelectable = Math.min(availableGroups, MAX_GROUPS_PER_STUDENT)
 
   function handleOpenChange(open: boolean) {
     if (!open) {
@@ -35,6 +41,7 @@ export function SelectCourseDialog({
       setTimeout(() => {
         setConfirmed(false)
         setPaymentType("money")
+        setNumGroups(1)
         setSubmitError(null)
       }, 300)
     }
@@ -51,7 +58,7 @@ export function SelectCourseDialog({
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ offerId, paymentType }),
+        body: JSON.stringify({ offerId, paymentType, numGroups }),
       })
 
       if (!response.ok) {
@@ -74,6 +81,26 @@ export function SelectCourseDialog({
         {!confirmed ? (
           <div className="flex flex-col gap-6">
             <DialogTitle className="text-lg font-bold text-black">Подтверждение заявки</DialogTitle>
+
+            {/* Group count selector */}
+            <div>
+              <p className="text-sm text-gray-600 mb-3">Количество групп (макс. {maxSelectable}):</p>
+              <div className="flex gap-2">
+                {Array.from({ length: maxSelectable }, (_, i) => i + 1).map((n) => (
+                  <button
+                    key={n}
+                    onClick={() => setNumGroups(n)}
+                    className={`w-10 h-10 rounded-xl border-2 text-sm font-semibold transition-all ${
+                      numGroups === n
+                        ? "border-black bg-black text-white"
+                        : "border-gray-200 bg-white text-black hover:border-gray-400"
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
 
             {/* Payment type selector */}
             <div>
@@ -107,10 +134,11 @@ export function SelectCourseDialog({
             <hr className="border-t-2 border-gray-200" />
 
             <p className="text-md text-gray-800 leading-relaxed text-justify">
-              Вы собираетесь записаться на{" "}
-              <span className="font-semibold text-black">{discipline}</span> на
-              ОП <span className="font-semibold text-black">{program}</span> под руководством{" "}
-              <span className="font-semibold text-black">{teacherName}</span>.<br /><br />
+              Вы собираетесь записаться на {" <"}
+              <span className="font-semibold text-black">{discipline}</span>{">"} на обр. программу {" <"}
+              <span className="font-semibold text-black">{program}</span>{">"} под руководством{" <"}
+              <span className="font-semibold text-black">{teacherName}</span>{">"}.<br /><br />
+              Количество групп: <span className="font-semibold text-black">{numGroups}</span>.<br />
               Формат оплаты: <span className="font-semibold text-black">
                 {paymentType === "money" ? "деньги" : "кредиты"}
               </span>.<br /><br />

@@ -18,9 +18,11 @@ interface GroupCardProps {
   studentEmail?: string
   studentTelegram?: string
   paymentType?: "money" | "credits" | null
+  bookingStatus?: "pending" | "active"
   hideAssistantName?: boolean
   onMoreDetails?: () => void
   onSelectAssistant?: () => void
+  onAccept?: () => void
 }
 
 function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
@@ -108,10 +110,11 @@ function NoAssistantCard({ discipline, faculty, program, modules, groupsCount, m
 function MyGroupCard({
   discipline, faculty, program, modules, groupsCount,
   studentFirstName, studentLastName, studentEmail, studentTelegram,
-  paymentType, onMoreDetails,
+  paymentType, bookingStatus, onMoreDetails, onAccept,
 }: GroupCardProps) {
   const isMoney = paymentType === "money"
   const isCredits = paymentType === "credits"
+  const isPending = bookingStatus === "pending"
 
   return (
     <Card className="bg-white shadow-sm hover:shadow-lg transition-shadow duration-300 border border-gray-100 rounded-2xl overflow-hidden flex flex-col">
@@ -142,11 +145,11 @@ function MyGroupCard({
           </div>
         </div>
 
-        {/* Email */}
-        <InfoRow icon={<Mail className="h-3.5 w-3.5 text-black" />} label="Email" value={studentEmail || "—"} />
-
-        {/* Telegram */}
-        <InfoRow icon={<Send className="h-3.5 w-3.5 text-black" />} label="Telegram" value={studentTelegram || "—"} />
+        {/* Email + Telegram side by side */}
+        <div className="grid grid-cols-2 gap-2">
+          <InfoRow icon={<Mail className="h-3.5 w-3.5 text-black" />} label="Email" value={studentEmail || "—"} />
+          <InfoRow icon={<Send className="h-3.5 w-3.5 text-black" />} label="Telegram" value={studentTelegram || "—"} />
+        </div>
 
         {/* Discipline */}
         <InfoRow icon={<Tag className="h-3.5 w-3.5 text-black" />} label="Discipline" value={discipline} />
@@ -161,15 +164,33 @@ function MyGroupCard({
         <ModulesRow groupsCount={groupsCount} modules={modules} />
       </CardContent>
 
-      <div className="mx-4 h-px bg-gray-100 mt-2" />
-      <CardFooter className="px-4 py-2">
-        <Button
-          variant="outline"
-          className="w-full h-9 text-sm font-medium bg-transparent border-2 border-blue-600 text-black hover:bg-blue-600 hover:text-white rounded-full transition-colors"
-          onClick={onMoreDetails}
-        >
-          More Details
-        </Button>
+      <div className="mx-4 h-px bg-gray-100 mb-1" />
+      <CardFooter className="px-4">
+        {isPending ? (
+          <div className="flex gap-2 w-full">
+            <Button
+              variant="outline"
+              className="flex-1 h-9 text-sm font-medium bg-transparent border-2 border-gray-400 text-black hover:bg-gray-100 rounded-full transition-colors"
+              onClick={onMoreDetails}
+            >
+              About student
+            </Button>
+            <Button
+              className="flex-1 h-9 text-sm font-medium bg-green-500 hover:bg-green-600 text-white rounded-full transition-colors"
+              onClick={onAccept}
+            >
+              Select
+            </Button>
+          </div>
+        ) : (
+          <Button
+            variant="outline"
+            className="w-full h-9 text-sm font-medium bg-transparent border-2 border-blue-600 text-black hover:bg-blue-600 hover:text-white rounded-full transition-colors"
+            onClick={onMoreDetails}
+          >
+            More Details
+          </Button>
+        )}
       </CardFooter>
     </Card>
   )

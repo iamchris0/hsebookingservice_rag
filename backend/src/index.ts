@@ -353,35 +353,35 @@ app.get(
     try {
       const result = await client.query(
         `SELECT
-           co.id,
-           d.name  AS discipline,
-           p.name  AS program,
-           f.name  AS faculty,
-           co.total_groups,
-           u.first_name,
-           u.last_name,
-           u.email AS teacher_email,
-           COALESCE((
-             SELECT array_agg(m.number ORDER BY m.number)
-             FROM dc_new.course_offer_modules com
-             JOIN dc_new.modules m ON com.module_id = m.id
-             WHERE com.offer_id = co.id
-           ), ARRAY[]::int[]) AS modules,
-           (co.total_groups - COALESCE((
-             SELECT COUNT(*) FROM dc_new.bookings b
-             WHERE b.offer_id = co.id AND b.status = 'active'
-           ), 0)) AS available_groups
-         FROM dc_new.course_offers co
-         JOIN dc_new.disciplines d ON co.discipline_id = d.id
-         JOIN dc_new.programs    p ON co.program_id    = p.id
-         JOIN dc_new.faculties   f ON p.faculty_id     = f.id
-         JOIN dc_new.users       u ON co.teacher_id    = u.id
-         WHERE co.status = 'open'
-           AND (co.total_groups - COALESCE((
-             SELECT COUNT(*) FROM dc_new.bookings b
-             WHERE b.offer_id = co.id AND b.status = 'active'
-           ), 0)) > 0
-         ORDER BY co.created_at DESC`
+          co.id,
+          d.name  AS discipline,
+          p.name  AS program,
+          f.name  AS faculty,
+          co.total_groups,
+          u.first_name,
+          u.last_name,
+          u.email AS teacher_email,
+          COALESCE((
+            SELECT array_agg(m.number ORDER BY m.number)
+            FROM dc_new.course_offer_modules com
+            JOIN dc_new.modules m ON com.module_id = m.id
+            WHERE com.offer_id = co.id
+          ), ARRAY[]::int[]) AS modules,
+          (co.total_groups - COALESCE((
+            SELECT SUM(COALESCE(b.num_groups, 1)) FROM dc_new.bookings b
+            WHERE b.offer_id = co.id AND b.status = 'active'
+          ), 0)) AS available_groups
+        FROM dc_new.course_offers co
+        JOIN dc_new.disciplines d ON co.discipline_id = d.id
+        JOIN dc_new.programs    p ON co.program_id    = p.id
+        JOIN dc_new.faculties   f ON p.faculty_id     = f.id
+        JOIN dc_new.users       u ON co.teacher_id    = u.id
+        WHERE co.status = 'open'
+          AND (co.total_groups - COALESCE((
+            SELECT SUM(COALESCE(b.num_groups, 1)) FROM dc_new.bookings b
+            WHERE b.offer_id = co.id AND b.status = 'active'
+          ), 0)) > 0
+        ORDER BY co.created_at DESC`
       );
       return result.rows;
     } finally {
@@ -392,7 +392,7 @@ app.get(
 
 // POST /api/student/bookings — student books an offer
 app.post<{
-  Body: { offerId: number; paymentType: "money" | "credits" };
+  Body: { offerId: number; paymentType: "money" | "credits"; numGroups: number };
 }>(
   "/api/student/bookings",
   { preHandler: [app.authenticate] },
@@ -402,10 +402,15 @@ app.post<{
       return reply.code(403).send({ error: "Forbidden" });
     }
 
-    const { offerId, paymentType } = request.body;
+    const { offerId, paymentType, numGroups } = request.body;
 
     if (!offerId || !paymentType || !["money", "credits"].includes(paymentType)) {
       return reply.code(400).send({ error: "Некорректные данные запроса" });
+    }
+
+    const groups = Number(numGroups) || 1;
+    if (groups < 1 || groups > 4) {
+      return reply.code(400).send({ error: "Количество групп должно быть от 1 до 4" });
     }
 
     const client = await app.pg.connect();
@@ -417,7 +422,7 @@ app.post<{
            co.teacher_id,
            co.total_groups,
            COALESCE((
-             SELECT COUNT(*) FROM dc_new.bookings b
+             SELECT SUM(COALESCE(b.num_groups, 1)) FROM dc_new.bookings b
              WHERE b.offer_id = co.id AND b.status = 'active'
            ), 0) AS booked_count
          FROM dc_new.course_offers co
@@ -436,12 +441,16 @@ app.post<{
         return reply.code(409).send({ error: "Нет свободных мест" });
       }
 
-      // Insert booking; DB UNIQUE constraint catches duplicate attempts
+      if (groups > available) {
+        return reply.code(409).send({ error: `Доступно только ${available} групп(ы)` });
+      }
+
+      // Insert booking with pending status; DB UNIQUE constraint catches duplicate attempts
       const insertResult = await client.query(
-        `INSERT INTO dc_new.bookings (offer_id, student_id, payment_type, created_by_teacher_id)
-         VALUES ($1, $2, $3, $4)
+        `INSERT INTO dc_new.bookings (offer_id, student_id, payment_type, num_groups, status, created_by_teacher_id)
+         VALUES ($1, $2, $3, $4, 'pending', $5)
          RETURNING id`,
-        [offerId, user.id, paymentType, offer.teacher_id]
+        [offerId, user.id, paymentType, groups, offer.teacher_id]
       );
 
       return reply.code(201).send({ bookingId: insertResult.rows[0].id });
@@ -614,7 +623,7 @@ app.get(
            d.name AS discipline,
            SUM(co.total_groups) AS total_groups,
            SUM(co.total_groups - COALESCE((
-             SELECT COUNT(*) FROM dc_new.bookings b
+             SELECT SUM(COALESCE(b.num_groups, 1)) FROM dc_new.bookings b
              WHERE b.offer_id = co.id AND b.status = 'active'
            ), 0)) AS groups_without_assistant
          FROM dc_new.course_offers co
@@ -687,7 +696,7 @@ app.get(
            mg.first_name AS manager_first_name,
            mg.last_name  AS manager_last_name,
            (co.total_groups - COALESCE((
-             SELECT COUNT(*) FROM dc_new.bookings b2
+             SELECT SUM(COALESCE(b2.num_groups, 1)) FROM dc_new.bookings b2
              WHERE b2.offer_id = co.id AND b2.status = 'active'
            ), 0)) AS available_groups,
            COALESCE((
@@ -705,14 +714,17 @@ app.get(
            COALESCE((
              SELECT json_agg(json_build_object(
                'booking_id',         b.id,
+               'status',             b.status,
                'payment_type',       b.payment_type,
                'student_first_name', s.first_name,
                'student_last_name',  s.last_name,
-               'student_email',      s.email
+               'student_email',      s.email,
+               'student_telegram',   sp.telegram
              ))
              FROM dc_new.bookings b
              JOIN dc_new.users s ON s.id = b.student_id
-             WHERE b.offer_id = co.id AND b.status = 'active'
+             LEFT JOIN dc_new.student_profiles sp ON sp.user_id = b.student_id
+             WHERE b.offer_id = co.id AND b.status IN ('active', 'pending')
            ), '[]'::json) AS bookings
          FROM dc_new.course_offers co
          JOIN dc_new.disciplines d ON co.discipline_id = d.id
@@ -724,6 +736,44 @@ app.get(
         [user.id]
       );
       return result.rows;
+    } finally {
+      client.release();
+    }
+  }
+);
+
+// PATCH /api/teacher/bookings/:bookingId/accept — promote pending → active
+app.patch<{ Params: { bookingId: string } }>(
+  "/api/teacher/bookings/:bookingId/accept",
+  { preHandler: [app.authenticate] },
+  async (request, reply) => {
+    const user = request.user as { id: number; role: string };
+    if (user.role !== "teacher") {
+      return reply.code(403).send({ error: "Forbidden" });
+    }
+
+    const bookingId = Number(request.params.bookingId);
+    if (!bookingId) {
+      return reply.code(400).send({ error: "Invalid booking id" });
+    }
+
+    const client = await app.pg.connect();
+    try {
+      const result = await client.query(
+        `UPDATE dc_new.bookings b
+         SET status = 'active'
+         FROM dc_new.course_offers co
+         WHERE b.id = $1
+           AND b.offer_id = co.id
+           AND co.teacher_id = $2
+           AND b.status = 'pending'
+         RETURNING b.id`,
+        [bookingId, user.id]
+      );
+      if (result.rows.length === 0) {
+        return reply.code(404).send({ error: "Booking not found or already accepted" });
+      }
+      return reply.code(200).send({ bookingId: result.rows[0].id });
     } finally {
       client.release();
     }
