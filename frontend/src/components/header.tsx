@@ -75,8 +75,8 @@ export function Header() {
             onClick={handleLogout}
             disabled={isLoggingOut}
           >
-            <LogOut className="w-4 h-4 mr-2" />
-            {isLoggingOut ? 'Logging out...' : 'Выход'}
+            <LogOut className="w-4 h-4" />
+            {isLoggingOut ? 'Выходим...' : ''}
           </Button>
         </div>
       </div>
