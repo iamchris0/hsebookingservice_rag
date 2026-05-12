@@ -1,10 +1,8 @@
 "use client"
 
-import { useState } from "react"
 import { Header } from "@/components/header"
+import { ManagerNav } from "./components/manager-nav"
 import { useAuth } from "@/hooks/use-auth"
-
-const navTabs = ["Courses"] as const
 
 export default function ManagerLayout({
   children,
@@ -12,7 +10,6 @@ export default function ManagerLayout({
   children: React.ReactNode
 }) {
   const { isLoading, isAuthenticated } = useAuth('manager');
-  const [activeTab, setActiveTab] = useState<string>("Courses");
 
   if (isLoading) {
     return (
@@ -32,23 +29,7 @@ export default function ManagerLayout({
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      <nav className="border-b border-gray-200 bg-white">
-        <div className="container mx-auto px-4 flex gap-8">
-          <button
-            onClick={() => setActiveTab("Courses")}
-            className={`px-6 py-4 text-sm font-medium transition-colors border-b-2 border-primary text-primary ${
-              activeTab === "Courses"
-                ? "text-black"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            Курсы
-            {activeTab === "Courses" && (
-              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
-            )}
-          </button>
-        </div>
-      </nav>
+      <ManagerNav />
       <main className="container mx-auto px-4 py-8">
         {children}
       </main>

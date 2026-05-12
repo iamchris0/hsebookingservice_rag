@@ -33,6 +33,17 @@ export function AssistantNav() {
           >
             Поиск группы
           </Link>
+          <Link
+            href="/student/ai-assistant"
+            className={cn(
+              "px-6 py-4 text-sm font-medium transition-colors border-b-2",
+              pathname === "/student/ai-assistant"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground",
+            )}
+          >
+            ИИ помощник
+          </Link>
         </div>
       </div>
     </nav>
