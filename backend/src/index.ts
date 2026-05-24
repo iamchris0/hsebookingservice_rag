@@ -187,6 +187,80 @@ app.post<{
   }
 });
 
+app.post<{
+  Body: {
+    email: string;
+    password: string;
+    firstName?: string;
+    lastName?: string;
+    middleName?: string;
+    role: "student" | "teacher" | "manager";
+    adminPassword?: string;
+  };
+}>("/api/register", async (request, reply) => {
+  const { email, password, firstName = "", lastName = "", middleName, role, adminPassword } = request.body;
+
+  if (!email || !password || !role) {
+    return reply.code(400).send({ error: "Email, пароль и роль обязательны" });
+  }
+
+  if ((role === "teacher" || role === "manager") && (!firstName.trim() || !lastName.trim())) {
+    return reply.code(400).send({ error: "Для данной роли необходимо указать имя и фамилию" });
+  }
+
+  if (!["student", "teacher", "manager"].includes(role)) {
+    return reply.code(400).send({ error: "Некорректная роль" });
+  }
+
+  if (role === "teacher" || role === "manager") {
+    const staffSecret = process.env.STAFF_SECRET;
+    if (!staffSecret || adminPassword !== staffSecret) {
+      return reply.code(403).send({ error: "Неверный пароль доступа" });
+    }
+  }
+
+  const client = await app.pg.connect();
+  try {
+    const existing = await client.query(
+      "SELECT id FROM dc_new.users WHERE email = $1",
+      [email]
+    );
+    if (existing.rows.length > 0) {
+      return reply.code(409).send({ error: "Пользователь с таким email уже существует" });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const result = await client.query(
+      `INSERT INTO dc_new.users (email, password_hash, first_name, last_name, middle_name, role)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id`,
+      [email, passwordHash, firstName, lastName, middleName ?? null, role]
+    );
+
+    const userId = result.rows[0].id;
+
+    if (role === "student") {
+      await client.query(
+        "INSERT INTO dc_new.student_profiles (user_id) VALUES ($1)",
+        [userId]
+      );
+    }
+
+    const token = app.jwt.sign({ id: userId, email, role });
+    return reply.code(201).send({
+      token,
+      user: { id: userId, email, role, firstName, lastName },
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    app.log.error(`Register error: ${errorMessage}`);
+    reply.code(500).send({ error: "Внутренняя ошибка сервера" });
+  } finally {
+    client.release();
+  }
+});
+
 app.post(
   "/api/logout",
   { preHandler: [app.authenticate] },

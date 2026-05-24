@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 // URL бэкенда - можно задать через переменную окружения NEXT_PUBLIC_BACKEND_URL
@@ -187,7 +187,7 @@ export default function Login() {
               type="button"
               className="hover:opacity-70 transition-opacity font-semibold"
               style={{ color: '#ff1ef7' }}
-              onClick={() => console.log('Register clicked')}
+              onClick={() => router.push('/register')}
             >
               Нажмите здесь
             </button>
