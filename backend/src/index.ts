@@ -1192,6 +1192,176 @@ app.post<{
   }
 );
 
+// ─── Chat / RAG endpoints ─────────────────────────────────────────────────────
+
+const RAG_SERVER_URL = process.env.RAG_SERVER_URL || "http://localhost:8001";
+
+// GET /api/chat/conversations — list conversations for the current user
+app.get(
+  "/api/chat/conversations",
+  { preHandler: [app.authenticate] },
+  async (request, _reply) => {
+    const user = request.user as { id: number };
+    const client = await app.pg.connect();
+    try {
+      const result = await client.query(
+        `SELECT id, title, created_at, updated_at
+         FROM dc_new.chat_conversations
+         WHERE user_id = $1
+         ORDER BY updated_at DESC
+         LIMIT 50`,
+        [user.id]
+      );
+      return result.rows;
+    } finally {
+      client.release();
+    }
+  }
+);
+
+// POST /api/chat/conversations — create a new conversation
+app.post<{ Body: { title?: string } }>(
+  "/api/chat/conversations",
+  { preHandler: [app.authenticate] },
+  async (request, reply) => {
+    const user = request.user as { id: number };
+    const title = request.body?.title?.trim() || "Новый чат";
+    const client = await app.pg.connect();
+    try {
+      const result = await client.query(
+        `INSERT INTO dc_new.chat_conversations (user_id, title)
+         VALUES ($1, $2)
+         RETURNING id, title, created_at, updated_at`,
+        [user.id, title]
+      );
+      return reply.code(201).send(result.rows[0]);
+    } finally {
+      client.release();
+    }
+  }
+);
+
+// GET /api/chat/conversations/:id/messages — messages for a conversation
+app.get<{ Params: { id: string } }>(
+  "/api/chat/conversations/:id/messages",
+  { preHandler: [app.authenticate] },
+  async (request, reply) => {
+    const user = request.user as { id: number };
+    const client = await app.pg.connect();
+    try {
+      // Verify ownership
+      const conv = await client.query(
+        `SELECT id FROM dc_new.chat_conversations WHERE id = $1 AND user_id = $2`,
+        [request.params.id, user.id]
+      );
+      if (conv.rows.length === 0) {
+        return reply.code(404).send({ error: "Conversation not found" });
+      }
+      const result = await client.query(
+        `SELECT id, role, content, created_at
+         FROM dc_new.chat_messages
+         WHERE conversation_id = $1
+         ORDER BY created_at ASC`,
+        [request.params.id]
+      );
+      return result.rows;
+    } finally {
+      client.release();
+    }
+  }
+);
+
+// POST /api/chat/messages — send a message and get RAG answer
+app.post<{
+  Body: { conversation_id?: string; message: string };
+}>(
+  "/api/chat/messages",
+  { preHandler: [app.authenticate] },
+  async (request, reply) => {
+    const user = request.user as { id: number };
+    const { message, conversation_id } = request.body;
+
+    if (!message?.trim()) {
+      return reply.code(400).send({ error: "message is required" });
+    }
+
+    const client = await app.pg.connect();
+    try {
+      let convId = conversation_id;
+
+      // Auto-create conversation on first message
+      if (!convId) {
+        const title = message.slice(0, 60) + (message.length > 60 ? "…" : "");
+        const conv = await client.query(
+          `INSERT INTO dc_new.chat_conversations (user_id, title)
+           VALUES ($1, $2)
+           RETURNING id`,
+          [user.id, title]
+        );
+        convId = conv.rows[0].id;
+      } else {
+        // Verify ownership
+        const conv = await client.query(
+          `SELECT id FROM dc_new.chat_conversations WHERE id = $1 AND user_id = $2`,
+          [convId, user.id]
+        );
+        if (conv.rows.length === 0) {
+          return reply.code(404).send({ error: "Conversation not found" });
+        }
+      }
+
+      // Save user message
+      await client.query(
+        `INSERT INTO dc_new.chat_messages (conversation_id, role, content)
+         VALUES ($1, 'user', $2)`,
+        [convId, message.trim()]
+      );
+
+      // Forward to Python RAG server
+      let answer: string;
+      try {
+        const ragRes = await fetch(`${RAG_SERVER_URL}/query`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question: message.trim(), conversation_id: convId }),
+        });
+        if (!ragRes.ok) {
+          const err = await ragRes.text();
+          app.log.error(`RAG server error: ${err}`);
+          return reply.code(502).send({ error: "RAG server unavailable" });
+        }
+        const data = await ragRes.json() as { answer: string };
+        answer = data.answer;
+      } catch (err) {
+        app.log.error(`RAG server unreachable: ${err}`);
+        return reply.code(502).send({ error: "RAG server unreachable" });
+      }
+
+      // Save assistant message
+      const saved = await client.query(
+        `INSERT INTO dc_new.chat_messages (conversation_id, role, content)
+         VALUES ($1, 'assistant', $2)
+         RETURNING id, created_at`,
+        [convId, answer]
+      );
+
+      // Bump conversation updated_at
+      await client.query(
+        `UPDATE dc_new.chat_conversations SET updated_at = NOW() WHERE id = $1`,
+        [convId]
+      );
+
+      return {
+        conversation_id: convId,
+        message_id: saved.rows[0].id,
+        answer,
+      };
+    } finally {
+      client.release();
+    }
+  }
+);
+
 // ─── Error handling ────────────────────────────────────────────────────────────
 
 app.setErrorHandler((error, _request, reply) => {
