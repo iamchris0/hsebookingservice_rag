@@ -464,6 +464,225 @@ app.get(
   }
 );
 
+// PUT /api/student/profile — save section-1 survey data
+app.put<{
+  Body: {
+    firstName: string;
+    lastName: string;
+    middleName?: string;
+    telegram: string;
+    birthday: string;
+    citizenship: string;
+    phone: string;
+  };
+}>(
+  "/api/student/profile",
+  { preHandler: [app.authenticate] },
+  async (request, reply) => {
+    const user = request.user as { id: number; role: string };
+    if (user.role !== "student") {
+      return reply.code(403).send({ error: "Forbidden" });
+    }
+
+    const { firstName, lastName, middleName, telegram, birthday, citizenship, phone } = request.body;
+
+    const client = await app.pg.connect();
+    try {
+      await client.query(
+        `UPDATE dc_new.users
+         SET first_name = $1, last_name = $2, middle_name = $3
+         WHERE id = $4`,
+        [firstName, lastName, middleName ?? null, user.id]
+      );
+
+      await client.query(
+        `UPDATE dc_new.student_profiles
+         SET telegram = $1, birthday = $2, citizenship = $3, phone = $4
+         WHERE user_id = $5`,
+        [telegram, birthday, citizenship, phone, user.id]
+      );
+
+      return { success: true };
+    } finally {
+      client.release();
+    }
+  }
+);
+
+// PUT /api/student/education — save section-2 education data
+app.put<{
+  Body: {
+    faculty: string;
+    program: string;
+    studyYear: number;
+    hasDebts: boolean;
+    rating: string;
+    digitalLiteracyScore: string | null;
+    programmingScore: string | null;
+    dataAnalysisScore: string | null;
+  };
+}>(
+  "/api/student/education",
+  { preHandler: [app.authenticate] },
+  async (request, reply) => {
+    const user = request.user as { id: number; role: string };
+    if (user.role !== "student") {
+      return reply.code(403).send({ error: "Forbidden" });
+    }
+
+    const { faculty, program, studyYear, hasDebts, rating,
+            digitalLiteracyScore, programmingScore, dataAnalysisScore } = request.body;
+
+    const client = await app.pg.connect();
+    try {
+      await client.query(
+        `UPDATE dc_new.student_profiles
+         SET edu_faculty = $1, edu_program = $2, study_year = $3, debts = $4,
+             edu_rating = $5, digital_literacy_score = $6,
+             python_score = $7, data_analysis_score = $8
+         WHERE user_id = $9`,
+        [faculty, program, studyYear, hasDebts ? 'yes' : 'no',
+         rating, digitalLiteracyScore, programmingScore, dataAnalysisScore, user.id]
+      );
+      return { success: true };
+    } finally {
+      client.release();
+    }
+  }
+);
+
+// PUT /api/student/priorities — save priority discipline data (priority 1 or 2)
+app.put<{
+  Body: {
+    disciplineId: number;
+    desiredGroupSize: number;
+    answers: Record<string, string>;
+    priority?: number;
+  };
+}>(
+  "/api/student/priorities",
+  { preHandler: [app.authenticate] },
+  async (request, reply) => {
+    const user = request.user as { id: number; role: string };
+    if (user.role !== "student") {
+      return reply.code(403).send({ error: "Forbidden" });
+    }
+
+    const { disciplineId, desiredGroupSize, answers, priority = 1 } = request.body;
+
+    const client = await app.pg.connect();
+    try {
+      await client.query(
+        `INSERT INTO dc_new.student_preferences (student_id, discipline_id, priority, desired_group_size)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (student_id, priority) DO UPDATE
+           SET discipline_id = EXCLUDED.discipline_id,
+               desired_group_size = EXCLUDED.desired_group_size`,
+        [user.id, disciplineId, priority, desiredGroupSize]
+      );
+
+      // Merge answers for this priority into the experience JSON field
+      const cur = await client.query(
+        `SELECT experience FROM dc_new.student_profiles WHERE user_id = $1`,
+        [user.id]
+      );
+      let all: Record<string, Record<string, string>> = {};
+      try { all = JSON.parse(cur.rows[0]?.experience ?? '{}'); } catch {}
+      all[String(priority)] = answers;
+
+      await client.query(
+        `UPDATE dc_new.student_profiles SET experience = $1 WHERE user_id = $2`,
+        [JSON.stringify(all), user.id]
+      );
+
+      return { success: true };
+    } finally {
+      client.release();
+    }
+  }
+);
+
+// PUT /api/student/recommendation — save section-6 teacher recommendation email
+app.put<{
+  Body: { teacherEmail: string };
+}>(
+  "/api/student/recommendation",
+  { preHandler: [app.authenticate] },
+  async (request, reply) => {
+    const user = request.user as { id: number; role: string };
+    if (user.role !== "student") {
+      return reply.code(403).send({ error: "Forbidden" });
+    }
+
+    const { teacherEmail } = request.body;
+
+    const client = await app.pg.connect();
+    try {
+      await client.query(
+        `UPDATE dc_new.student_profiles
+         SET recommendation_email = $1, recommendation_available = true
+         WHERE user_id = $2`,
+        [teacherEmail, user.id]
+      );
+      return { success: true };
+    } finally {
+      client.release();
+    }
+  }
+);
+
+// PUT /api/student/motivation — save section-5 motivation data
+app.put<{
+  Body: { motivation: string; achievements: string; priorCourses: string };
+}>(
+  "/api/student/motivation",
+  { preHandler: [app.authenticate] },
+  async (request, reply) => {
+    const user = request.user as { id: number; role: string };
+    if (user.role !== "student") {
+      return reply.code(403).send({ error: "Forbidden" });
+    }
+
+    const { motivation, achievements, priorCourses } = request.body;
+
+    const client = await app.pg.connect();
+    try {
+      await client.query(
+        `UPDATE dc_new.student_profiles
+         SET motivation_text = $1, achievements = $2, prior_courses = $3
+         WHERE user_id = $4`,
+        [motivation, achievements, priorCourses, user.id]
+      );
+      return { success: true };
+    } finally {
+      client.release();
+    }
+  }
+);
+
+// POST /api/student/survey/complete — mark questionnaire as done
+app.post(
+  "/api/student/survey/complete",
+  { preHandler: [app.authenticate] },
+  async (request, reply) => {
+    const user = request.user as { id: number; role: string };
+    if (user.role !== "student") {
+      return reply.code(403).send({ error: "Forbidden" });
+    }
+
+    const client = await app.pg.connect();
+    try {
+      await client.query(
+        `UPDATE dc_new.student_profiles SET questionnaire_completed = true WHERE user_id = $1`,
+        [user.id]
+      );
+      return { success: true };
+    } finally {
+      client.release();
+    }
+  }
+);
+
 // POST /api/student/bookings — student books an offer
 app.post<{
   Body: { offerId: number; paymentType: "money" | "credits"; numGroups: number };

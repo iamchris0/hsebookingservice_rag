@@ -83,7 +83,7 @@ export default function Register() {
       }
 
       if (role === 'student') {
-        router.push('/student/survey');
+        router.push('/survey');
       } else if (role === 'teacher') {
         router.push('/teacher');
       } else {
