@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 
 // URL бэкенда - можно задать через переменную окружения NEXT_PUBLIC_BACKEND_URL
 // В Next.js переменные окружения с NEXT_PUBLIC_ доступны в клиентских компонентах
-const BACKEND_URL = 'http://localhost:3001';
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
 
 export default function Login() {
   const [email, setEmail] = useState('');

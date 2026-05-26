@@ -3,7 +3,7 @@ import { QuestionConfig } from './types';
 
 const digitalLiteracyQuestions: QuestionConfig[] = [
   {
-    id: 'examLink',
+    id: 'dl_1',
     text: (
       <>
         Приложите ссылку на вашу попытку сдачи экзамена в разделе{' '}
@@ -15,11 +15,11 @@ const digitalLiteracyQuestions: QuestionConfig[] = [
     ),
   },
   {
-    id: 'questionExplanation',
+    id: 'dl_2',
     text: 'Выберите вопрос из вашей случайной попытки и представьте, что к вам обратился студент с просьбой его пояснить. Как вы ответите?',
   },
   {
-    id: 'consultationFocus',
+    id: 'dl_3',
     text: 'Расскажите, на чём бы вы сфокусировались, если бы вас попросили провести консультацию по Независимому экзамену?',
   },
 ];
