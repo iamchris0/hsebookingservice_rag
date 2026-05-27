@@ -53,7 +53,23 @@ export function MyGroupsSection() {
         toast.success("Ассистент успешно назначен!")
       }
     } catch {
-      // fail silently
+      toast.error("Не удалось назначить ассистента.")
+    }
+  }
+
+  const handleDelete = async (bookingId: number) => {
+    try {
+      const token = localStorage.getItem("token")
+      const response = await fetch(
+        `${BACKEND_URL}/api/teacher/bookings/${bookingId}`,
+        { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }
+      )
+      if (response.ok) {
+        await fetchGroups()
+        toast.success("Запись удалена.")
+      }
+    } catch {
+      toast.error("Не удалось удалить запись.")
     }
   }
 
@@ -137,6 +153,7 @@ export function MyGroupsSection() {
                   <GroupCard
                     key={booking.booking_id}
                     offerId={String(offer.id)}
+                    bookingId={booking.booking_id}
                     discipline={offer.discipline}
                     faculty={offer.faculty}
                     program={offer.program}
@@ -150,6 +167,7 @@ export function MyGroupsSection() {
                     bookingStatus={booking.status}
                     onMoreDetails={() => setSelectedItem({ offer, booking })}
                     onAccept={() => handleAccept(booking.booking_id)}
+                    onDelete={() => handleDelete(booking.booking_id)}
                   />
                 ))}
               </div>

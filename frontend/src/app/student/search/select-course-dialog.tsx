@@ -155,7 +155,7 @@ export function SelectCourseDialog({
               onClick={handleConfirm}
               disabled={isSubmitting}
             >
-              {isSubmitting ? "Отправка..." : "Confirm"}
+              {isSubmitting ? "Отправка..." : "Подтвердить"}
             </Button>
           </div>
         ) : (

@@ -738,20 +738,29 @@ app.post<{
         return reply.code(409).send({ error: `Доступно только ${available} групп(ы)` });
       }
 
-      // Insert booking with pending status; DB UNIQUE constraint catches duplicate attempts
+      // Upsert: re-apply if a previous booking was cancelled, reject if active/pending
       const insertResult = await client.query(
-        `INSERT INTO dc_new.bookings (offer_id, student_id, payment_type, num_groups, status, created_by_teacher_id)
-         VALUES ($1, $2, $3, $4, 'pending', $5)
+        `INSERT INTO dc_new.bookings (offer_id, student_id, payment_type, num_groups, status, created_by_teacher_id, created_at)
+         VALUES ($1, $2, $3, $4, 'pending', $5, now())
+         ON CONFLICT (offer_id, student_id) DO UPDATE
+           SET status               = 'pending',
+               payment_type         = EXCLUDED.payment_type,
+               num_groups           = EXCLUDED.num_groups,
+               created_by_teacher_id = EXCLUDED.created_by_teacher_id,
+               cancelled_at         = NULL,
+               cancelled_by_user_id = NULL,
+               created_at           = now()
+           WHERE dc_new.bookings.status = 'cancelled'
          RETURNING id`,
         [offerId, user.id, paymentType, groups, offer.teacher_id]
       );
 
-      return reply.code(201).send({ bookingId: insertResult.rows[0].id });
-    } catch (error: unknown) {
-      const pgError = error as { code?: string };
-      if (pgError.code === "23505") {
+      if (insertResult.rows.length === 0) {
         return reply.code(409).send({ error: "Вы уже записаны на это предложение" });
       }
+
+      return reply.code(201).send({ bookingId: insertResult.rows[0].id });
+    } catch (error: unknown) {
       throw error;
     } finally {
       client.release();
@@ -1065,6 +1074,43 @@ app.patch<{ Params: { bookingId: string } }>(
       );
       if (result.rows.length === 0) {
         return reply.code(404).send({ error: "Booking not found or already accepted" });
+      }
+      return reply.code(200).send({ bookingId: result.rows[0].id });
+    } finally {
+      client.release();
+    }
+  }
+);
+
+// DELETE /api/teacher/bookings/:bookingId — cancel a booking (set status to 'cancelled')
+app.delete<{ Params: { bookingId: string } }>(
+  "/api/teacher/bookings/:bookingId",
+  { preHandler: [app.authenticate] },
+  async (request, reply) => {
+    const user = request.user as { id: number; role: string };
+    if (user.role !== "teacher") {
+      return reply.code(403).send({ error: "Forbidden" });
+    }
+
+    const bookingId = Number(request.params.bookingId);
+    if (!bookingId) {
+      return reply.code(400).send({ error: "Invalid booking id" });
+    }
+
+    const client = await app.pg.connect();
+    try {
+      const result = await client.query(
+        `UPDATE dc_new.bookings b
+         SET status = 'cancelled', cancelled_at = now(), cancelled_by_user_id = $2
+         FROM dc_new.course_offers co
+         WHERE b.id = $1
+           AND b.offer_id = co.id
+           AND co.teacher_id = $2
+         RETURNING b.id`,
+        [bookingId, user.id]
+      );
+      if (result.rows.length === 0) {
+        return reply.code(404).send({ error: "Booking not found" });
       }
       return reply.code(200).send({ bookingId: result.rows[0].id });
     } finally {
