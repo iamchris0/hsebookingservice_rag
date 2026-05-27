@@ -3,7 +3,7 @@ export const DISCIPLINE_DB_TO_DISPLAY: Record<string, string> = {
   machine_learning:   "Машинное обучение",
   data_analysis:      "Анализ данных",
   python_programming: "Программирование",
-  digital_literacy:   "Цифровая грамотность",
+  digital_literacy:   "Цифровая грамотность и ИИ",
 }
 
 // Maps Russian display names → DB English keys
@@ -11,7 +11,7 @@ export const DISCIPLINE_DISPLAY_TO_DB: Record<string, string> = {
   "Машинное обучение": "machine_learning",
   "Анализ данных":     "data_analysis",
   "Программирование":  "python_programming",
-  "Цифровая грамотность":        "digital_literacy",
+  "Цифровая грамотность и ИИ":        "digital_literacy",
 }
 
 export function toDisplayDiscipline(dbKey: string): string {

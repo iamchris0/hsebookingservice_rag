@@ -518,7 +518,7 @@ function validateS2(s: S2): Partial<Record<keyof S2, string>> {
 }
 
 const EXAMS: { key: keyof S2; label: string }[] = [
-  { key: 'digitalLiteracyScore', label: 'Цифровая грамотность' },
+  { key: 'digitalLiteracyScore', label: 'Цифровая грамотность и ИИ' },
   { key: 'programmingScore',     label: 'Программирование' },
   { key: 'dataAnalysisScore',    label: 'Анализ данных' },
 ];

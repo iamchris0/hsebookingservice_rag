@@ -23,7 +23,7 @@ interface SelectAssistantDialogProps {
 
 const MAX_ASSIGNMENTS = 4
 
-const disciplines = ["Программирование на Python", "Анализ данных", "Машинное обучение", "Цифровая грамотность"]
+const disciplines = ["Программирование на Python", "Анализ данных", "Машинное обучение", "Цифровая грамотность и ИИ"]
 
 export function SelectAssistantDialog({
   isOpen,
