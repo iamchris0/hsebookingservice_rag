@@ -1,11 +1,75 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Trash2, Mail, BookOpen, GraduationCap, UsersRound, Send, DollarSign, CreditCard, UserCircle2, Tag } from "lucide-react"
 
+function ConfirmDeleteDialog({
+  isOpen,
+  onClose,
+  onConfirm,
+}: {
+  isOpen: boolean
+  onClose: () => void
+  onConfirm: () => void
+}) {
+  const [isVisible, setIsVisible] = useState(false)
+  const [isAnimating, setIsAnimating] = useState(false)
+
+  useEffect(() => {
+    if (isOpen) {
+      setIsVisible(true)
+      const t = setTimeout(() => setIsAnimating(true), 50)
+      return () => clearTimeout(t)
+    } else {
+      setIsAnimating(false)
+      const t = setTimeout(() => setIsVisible(false), 300)
+      return () => clearTimeout(t)
+    }
+  }, [isOpen])
+
+  if (!isVisible) return null
+
+  return (
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center transition-all duration-300 ${
+        isAnimating ? "bg-black/50" : "bg-black/0"
+      }`}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div
+        className={`bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl transition-all duration-300 ${
+          isAnimating ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-95 translate-y-4"
+        }`}
+      >
+        <p className="text-base font-bold text-black m-4 text-center">
+          Вы уверены, что хотите удалить эту запись?
+        </p>
+        <p className="text-sm text-gray-500 mb-6 text-center">Это действие необратимо.</p>
+        <div className="flex gap-3">
+          <Button
+            variant="outline"
+            className="flex-1 rounded-full border-2 border-gray-300 text-black hover:bg-gray-50"
+            onClick={onClose}
+          >
+            Отмена
+          </Button>
+          <Button
+            className="flex-1 rounded-full bg-[#ff1ef7] hover:bg-[#e000dc] text-white border-0"
+            onClick={onConfirm}
+          >
+            Удалить
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 interface GroupCardProps {
   offerId: string
+  bookingId?: number
   discipline: string
   faculty: string
   program: string
@@ -23,6 +87,7 @@ interface GroupCardProps {
   onMoreDetails?: () => void
   onSelectAssistant?: () => void
   onAccept?: () => void
+  onDelete?: () => void
 }
 
 function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
@@ -110,89 +175,106 @@ function NoAssistantCard({ discipline, faculty, program, modules, groupsCount, m
 function MyGroupCard({
   discipline, faculty, program, modules, groupsCount,
   studentFirstName, studentLastName, studentEmail, studentTelegram,
-  paymentType, bookingStatus, onMoreDetails, onAccept,
+  paymentType, bookingStatus, onMoreDetails, onAccept, onDelete,
 }: GroupCardProps) {
+  const [confirmOpen, setConfirmOpen] = useState(false)
   const isMoney = paymentType === "money"
   const isCredits = paymentType === "credits"
   const isPending = bookingStatus === "pending"
 
   return (
-    <Card className="bg-white shadow-sm hover:shadow-lg transition-shadow duration-300 border border-gray-100 rounded-2xl overflow-hidden flex flex-col">
-      <CardContent className="px-4 pb-2 flex-1 space-y-2.5">
+    <>
+      <ConfirmDeleteDialog
+        isOpen={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        onConfirm={() => { onDelete?.(); setConfirmOpen(false) }}
+      />
+      <Card className="bg-white shadow-sm hover:shadow-lg transition-shadow duration-300 border border-gray-100 rounded-2xl overflow-hidden flex flex-col">
+        <CardContent className="px-4 pb-2 flex-1 space-y-2.5">
 
-        {/* Assistant name + delete + format badge */}
-        <div className="flex items-start justify-between gap-2">
-          <h2 className="text-base font-bold text-black leading-tight">
-            {studentLastName} {studentFirstName}
-          </h2>
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            {(isMoney || isCredits) && (
-              <div className={`flex items-center gap-1 rounded-full px-2 py-0.5 ${
-                isMoney ? "bg-green-50 border border-green-200" : "bg-purple-50 border border-purple-200"
-              }`}>
-                {isMoney
-                  ? <DollarSign className="h-3 w-3 text-green-600" />
-                  : <CreditCard className="h-3 w-3 text-purple-600" />
-                }
-                <span className={`text-[10px] font-semibold ${isMoney ? "text-green-700" : "text-purple-700"}`}>
-                  {isMoney ? "Оплата" : "Кредиты"}
-                </span>
-              </div>
-            )}
-            <Button variant="ghost" size="icon" className="h-7 w-7 text-[#ff1ef7] hover:text-[#ff1ef7] hover:bg-red-50">
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
+          {/* Student name + delete + payment badge */}
+          <div className="flex items-start justify-between gap-2">
+            <h2 className="text-base font-bold text-black leading-tight">
+              {studentLastName} {studentFirstName}
+            </h2>
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              {(isMoney || isCredits) && (
+                <div className={`flex items-center gap-1 rounded-full px-2 py-0.5 ${
+                  isMoney ? "bg-green-50 border border-green-200" : "bg-purple-50 border border-purple-200"
+                }`}>
+                  {isMoney
+                    ? <DollarSign className="h-3 w-3 text-green-600" />
+                    : <CreditCard className="h-3 w-3 text-purple-600" />
+                  }
+                  <span className={`text-[10px] font-semibold ${isMoney ? "text-green-700" : "text-purple-700"}`}>
+                    {isMoney ? "Оплата" : "Кредиты"}
+                  </span>
+                </div>
+              )}
+              <Button variant="ghost" size="icon" className="h-7 w-7 text-[#ff1ef7] hover:text-[#ff1ef7] hover:bg-red-50" onClick={() => setConfirmOpen(true)}>
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
           </div>
-        </div>
 
-        {/* Email + Telegram side by side */}
-        <div className="grid grid-cols-2 gap-2">
-          <InfoRow icon={<Mail className="h-3.5 w-3.5 text-black" />} label="Email" value={studentEmail || "—"} />
-          <InfoRow icon={<Send className="h-3.5 w-3.5 text-black" />} label="Telegram" value={studentTelegram || "—"} />
-        </div>
+          {/* Email + Telegram side by side */}
+          <div className="grid grid-cols-2 gap-2">
+            <InfoRow icon={<Mail className="h-3.5 w-3.5 text-black" />} label="Email" value={studentEmail || "—"} />
+            <InfoRow icon={<Send className="h-3.5 w-3.5 text-black" />} label="Telegram" value={studentTelegram || "—"} />
+          </div>
 
-        {/* Discipline */}
-        <InfoRow icon={<Tag className="h-3.5 w-3.5 text-black" />} label="Дисциплина" value={discipline} />
+          {/* Discipline */}
+          <InfoRow icon={<Tag className="h-3.5 w-3.5 text-black" />} label="Дисциплина" value={discipline} />
 
-        {/* Faculty */}
-        <InfoRow icon={<GraduationCap className="h-3.5 w-3.5 text-black" />} label="Факультет" value={faculty} />
+          {/* Faculty */}
+          <InfoRow icon={<GraduationCap className="h-3.5 w-3.5 text-black" />} label="Факультет" value={faculty} />
 
-        {/* Program */}
-        <InfoRow icon={<BookOpen className="h-3.5 w-3.5 text-black" />} label="Образовательная программа" value={program} />
+          {/* Program */}
+          <InfoRow icon={<BookOpen className="h-3.5 w-3.5 text-black" />} label="Образовательная программа" value={program} />
 
-        {/* Groups count + Modules */}
-        <ModulesRow groupsCount={groupsCount} modules={modules} />
-      </CardContent>
+          {/* Groups count + Modules */}
+          <ModulesRow groupsCount={groupsCount} modules={modules} />
+        </CardContent>
 
-      <div className="mx-4 h-px bg-gray-100 mb-1" />
-      <CardFooter className="px-4">
-        {isPending ? (
-          <div className="flex gap-2 w-full">
+        <div className="mx-4 h-px bg-gray-100 mb-1" />
+        <CardFooter className="px-4">
+          {isPending ? (
+            <div className="flex flex-col gap-2 w-full">
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1 h-9 text-sm font-medium bg-transparent border-2 border-red-400 text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                  onClick={() => setConfirmOpen(true)}
+                >
+                  Отказаться
+                </Button>
+                <Button
+                  className="flex-1 h-9 text-sm font-medium bg-green-500 hover:bg-green-600 text-white rounded-full transition-colors"
+                  onClick={onAccept}
+                >
+                  Добавить
+                </Button>
+              </div>
+              <Button
+                variant="outline"
+                className="w-full h-9 text-sm font-medium bg-transparent border-2 border-gray-400 text-black hover:bg-gray-100 rounded-full transition-colors"
+                onClick={onMoreDetails}
+              >
+                Об ассистенте
+              </Button>
+            </div>
+          ) : (
             <Button
               variant="outline"
-              className="flex-1 h-9 text-sm font-medium bg-transparent border-2 border-gray-400 text-black hover:bg-gray-100 rounded-full transition-colors"
+              className="w-full h-9 text-sm font-medium bg-transparent border-2 border-blue-600 text-black hover:bg-blue-600 hover:text-white rounded-full transition-colors"
               onClick={onMoreDetails}
             >
-              Об ассистенте
+              Подробнее
             </Button>
-            <Button
-              className="flex-1 h-9 text-sm font-medium bg-green-500 hover:bg-green-600 text-white rounded-full transition-colors"
-              onClick={onAccept}
-            >
-              Выбрать
-            </Button>
-          </div>
-        ) : (
-          <Button
-            variant="outline"
-            className="w-full h-9 text-sm font-medium bg-transparent border-2 border-blue-600 text-black hover:bg-blue-600 hover:text-white rounded-full transition-colors"
-            onClick={onMoreDetails}
-          >
-            Подробнее
-          </Button>
-        )}
-      </CardFooter>
-    </Card>
+          )}
+        </CardFooter>
+      </Card>
+    </>
   )
 }
 
