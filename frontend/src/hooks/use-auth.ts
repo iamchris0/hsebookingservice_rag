@@ -12,6 +12,7 @@ interface User {
   role: string;
   firstName?: string;
   lastName?: string;
+  questionnaireCompleted?: boolean | null;
 }
 
 export function useAuth(requiredRole?: string | string[]) {
@@ -51,6 +52,15 @@ export function useAuth(requiredRole?: string | string[]) {
           localStorage.removeItem('user');
           router.push('/');
           return;
+        }
+
+        // Студент без заполненной анкеты всегда попадает на /survey
+        if (userData.role === 'student' && !userData.questionnaireCompleted) {
+          const currentPath = window.location.pathname;
+          if (currentPath !== '/survey') {
+            router.push('/survey');
+            return;
+          }
         }
 
         // Проверяем роль, если требуется

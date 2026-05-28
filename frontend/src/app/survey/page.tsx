@@ -1354,6 +1354,12 @@ export default function SurveyPage() {
         method: 'POST', headers: { Authorization: `Bearer ${token}` },
       });
 
+      const userStr = localStorage.getItem('user');
+      if (userStr) {
+        const user = JSON.parse(userStr);
+        localStorage.setItem('user', JSON.stringify({ ...user, questionnaireCompleted: true }));
+      }
+
       clearSurveyDraft();
       router.push('/student/my-groups');
     } finally {

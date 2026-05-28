@@ -160,9 +160,9 @@ app.post<{
       "SELECT id, password_hash, role, first_name, last_name FROM dc_new.users WHERE email = $1",
       [email]
     );
-    client.release();
 
     if (result.rows.length === 0) {
+      client.release();
       reply.code(401).send({ error: "Аккаунта не существует" });
       return;
     }
@@ -171,14 +171,25 @@ app.post<{
 
     const isPasswordValid = await bcrypt.compare(password, password_hash);
     if (!isPasswordValid) {
+      client.release();
       reply.code(401).send({ error: "Неверные данные входа" });
       return;
     }
 
+    let questionnaireCompleted: boolean | null = null;
+    if (role === "student") {
+      const profileResult = await client.query(
+        "SELECT questionnaire_completed FROM dc_new.student_profiles WHERE user_id = $1",
+        [id]
+      );
+      questionnaireCompleted = profileResult.rows[0]?.questionnaire_completed ?? false;
+    }
+    client.release();
+
     const token = app.jwt.sign({ id, email, role });
     return {
       token,
-      user: { id, email, role, firstName: first_name, lastName: last_name },
+      user: { id, email, role, firstName: first_name, lastName: last_name, questionnaireCompleted },
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);

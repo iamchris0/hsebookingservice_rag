@@ -45,11 +45,10 @@ export default function Login() {
 
       // Редирект в зависимости от роли
       const role = data.user?.role;
-      console.log(role)
       if (role === 'teacher') {
         router.push('/teacher');
       } else if (role === 'student') {
-        router.push('/student');
+        router.push(data.user?.questionnaireCompleted ? '/student' : '/survey');
       } else if (role === 'manager') {
         router.push('/manager');
       } else {
@@ -193,18 +192,6 @@ export default function Login() {
             </button>
           </p>
         </div>
-
-        {/* Recover Password */}
-        <div className="flex justify-center">
-            <button
-              type="button"
-              className="text-xs text-center hover:opacity-70 transition-opacity font-medium "
-              style={{ color: '#ff1ef7' }}
-              onClick={() => console.log('Recover password clicked')}
-            >
-              Восстановить пароль
-            </button>
-          </div>
       </div>
     </div>
   );
