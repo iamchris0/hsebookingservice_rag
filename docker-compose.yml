@@ -1,0 +1,76 @@
+services:
+  ollama:
+    image: ollama/ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list > /dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  ollama-init:
+    image: ollama/ollama
+    depends_on:
+      ollama:
+        condition: service_healthy
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      OLLAMA_HOST: "http://ollama:11434"
+    entrypoint: ["ollama", "pull", "qwen2.5:7b"]
+    restart: "no"
+
+  rag_server:
+    build:
+      context: ./backend
+      dockerfile: rag_server/Dockerfile
+    ports:
+      - "8001:8001"
+    env_file:
+      - ./backend/rag_server/.env
+    environment:
+      OLLAMA_BASE_URL: "http://ollama:11434"
+      KNOWLEDGE_BASE_DIR: "/app/knowledge_base"
+      HF_HOME: "/cache/huggingface"
+    volumes:
+      - hf_cache:/cache/huggingface
+    depends_on:
+      ollama-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "3001:3001"
+    env_file:
+      - ./backend/.env
+    environment:
+      RAG_SERVER_URL: "http://rag_server:8001"
+      CORS_ORIGIN: "http://158.160.18.43:2000"
+    depends_on:
+      - rag_server
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_BACKEND_URL: "http://158.160.18.43:3001"
+    ports:
+      - "2000:3000"
+    environment:
+      NODE_ENV: production
+    restart: unless-stopped
+    depends_on:
+      - backend
+
+volumes:
+  ollama_data:
+  hf_cache:
