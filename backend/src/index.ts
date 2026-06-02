@@ -1169,7 +1169,7 @@ app.get(
            ), 0)::int AS active_assignments
          FROM dc_new.users u
          LEFT JOIN dc_new.student_profiles sp ON sp.user_id = u.id
-         WHERE u.role = 'student'
+         WHERE u.role = 'student' and sp.questionnaire_completed = true
          ORDER BY u.last_name, u.first_name`
       );
       return result.rows;
