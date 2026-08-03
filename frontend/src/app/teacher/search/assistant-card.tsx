@@ -4,7 +4,6 @@ import { useState } from "react"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Star, GraduationCap, BookOpen, Mail, Send } from "lucide-react"
-import { SelectAssistantDialog } from "./select-assistant-dialog"
 import { Assistant } from "../types"
 
 type AssistantCardProps = Assistant
@@ -42,14 +41,11 @@ export function AssistantCard({
   email,
   telegram,
   isFavorite,
-  currentAssignments,
 }: AssistantCardProps) {
   const [favorite, setFavorite] = useState(isFavorite)
-  const [isDialogOpen, setIsDialogOpen] = useState(false)
 
   return (
-    <>
-      <Card className="bg-white shadow-sm hover:shadow-lg transition-shadow duration-300 border border-gray-100 rounded-2xl overflow-hidden flex flex-col">
+    <Card className="bg-white shadow-sm hover:shadow-lg transition-shadow duration-300 border border-gray-100 rounded-2xl overflow-hidden flex flex-col">
         <CardContent className="px-4 pt-4 flex-1 space-y-3">
 
           {/* 1. Name + Star */}
@@ -134,30 +130,13 @@ export function AssistantCard({
         <div className="mx-4 h-px bg-gray-100" />
 
         <CardFooter className="px-4">
-          <div className="flex gap-2 w-full">
-            <Button
-              variant="outline"
-              className="flex-1 rounded-full border-[#2300fa] text-[#2300fa] bg-transparent hover:bg-blue-50 text-sm h-9"
-            >
-              Подробнее
-            </Button>
-            <Button
-              variant="outline"
-              className="flex-1 rounded-full border-black bg-[#DCFF05] hover:bg-[#c9eb00] text-black text-sm h-9"
-              onClick={() => setIsDialogOpen(true)}
-            >
-              Выбрать
-            </Button>
-          </div>
+          <Button
+            variant="outline"
+            className="w-full rounded-full border-[#2300fa] text-[#2300fa] bg-transparent hover:bg-blue-50 text-sm h-9"
+          >
+            Подробнее
+          </Button>
         </CardFooter>
       </Card>
-
-      <SelectAssistantDialog
-        isOpen={isDialogOpen}
-        onClose={() => setIsDialogOpen(false)}
-        assistantName={name}
-        currentAssignments={currentAssignments}
-      />
-    </>
   )
 }

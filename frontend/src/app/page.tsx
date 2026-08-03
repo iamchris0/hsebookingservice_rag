@@ -49,8 +49,6 @@ export default function Login() {
         router.push('/teacher');
       } else if (role === 'student') {
         router.push(data.user?.questionnaireCompleted ? '/student' : '/survey');
-      } else if (role === 'manager') {
-        router.push('/manager');
       } else {
         setError('Неизвестная роль пользователя');
         setIsLoading(false);

@@ -4,25 +4,22 @@ import React, { useState, useEffect, useRef } from "react"
 import { X, Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { CourseData, DisciplineOption, FacultyOption, LinkRow, ModuleOption, ProgramOption, Teacher } from "../types"
+import { CreateCourseData, DisciplineOption, FacultyOption, LinkRow, ModuleOption, ProgramOption } from "../types"
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001"
 
-interface AddCourseDialogProps {
+interface CreateCourseDialogProps {
   isOpen: boolean
   onClose: () => void
-  onSubmit: (data: CourseData) => void
-  editData?: CourseData | null
+  onSubmit: (data: CreateCourseData) => void
 }
 
-export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCourseDialogProps) {
+export function CreateCourseDialog({ isOpen, onClose, onSubmit }: CreateCourseDialogProps) {
   const [isVisible, setIsVisible] = useState(false)
   const [isAnimating, setIsAnimating] = useState(false)
 
   // Form state
   const [selectedDisciplineId, setSelectedDisciplineId] = useState<number | null>(null)
-  const [selectedTeacherId, setSelectedTeacherId] = useState<number | null>(null)
-  const [teacherSearch, setTeacherSearch] = useState("")
   const [facultyValue, setFacultyValue] = useState("")
   const [programValue, setProgramValue] = useState("")
   const [numberOfGroups, setNumberOfGroups] = useState("")
@@ -30,17 +27,14 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
   const [links, setLinks] = useState<LinkRow[]>([])
 
   // Dropdown open state
-  const [isTeacherDropdownOpen, setIsTeacherDropdownOpen] = useState(false)
   const [isFacultyDropdownOpen, setIsFacultyDropdownOpen] = useState(false)
   const [isProgramDropdownOpen, setIsProgramDropdownOpen] = useState(false)
 
   // Refs for click-outside
-  const teacherRef = useRef<HTMLDivElement>(null)
   const facultyRef = useRef<HTMLDivElement>(null)
   const programRef = useRef<HTMLDivElement>(null)
 
   // Data from API
-  const [teachers, setTeachers] = useState<Teacher[]>([])
   const [disciplines, setDisciplines] = useState<DisciplineOption[]>([])
   const [faculties, setFaculties] = useState<FacultyOption[]>([])
   const [programs, setPrograms] = useState<ProgramOption[]>([])
@@ -51,13 +45,11 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
     const headers = { Authorization: `Bearer ${token}` }
 
     Promise.all([
-      fetch(`${BACKEND_URL}/api/teachers`, { headers }).then((r) => r.ok ? r.json() : []),
       fetch(`${BACKEND_URL}/api/disciplines`, { headers }).then((r) => r.ok ? r.json() : []),
       fetch(`${BACKEND_URL}/api/faculties`, { headers }).then((r) => r.ok ? r.json() : []),
       fetch(`${BACKEND_URL}/api/programs`, { headers }).then((r) => r.ok ? r.json() : []),
       fetch(`${BACKEND_URL}/api/modules`, { headers }).then((r) => r.ok ? r.json() : []),
-    ]).then(([t, d, f, p, m]) => {
-      setTeachers(t)
+    ]).then(([d, f, p, m]) => {
       setDisciplines(d)
       setFaculties(f)
       setPrograms(p)
@@ -67,16 +59,6 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
 
   useEffect(() => {
     if (isOpen) {
-      if (editData) {
-        setSelectedDisciplineId(editData.disciplineId)
-        setSelectedTeacherId(editData.teacherId)
-        setTeacherSearch(editData.teacherName)
-        setFacultyValue(editData.faculty)
-        setProgramValue(editData.program)
-        setNumberOfGroups(String(editData.numberOfGroups))
-        setSelectedModuleIds(editData.moduleIds)
-        setLinks(editData.links || [])
-      }
       setIsVisible(true)
       const t = setTimeout(() => setIsAnimating(true), 50)
       return () => clearTimeout(t)
@@ -85,25 +67,20 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
       const timeout = setTimeout(() => {
         setIsVisible(false)
         setSelectedDisciplineId(null)
-        setSelectedTeacherId(null)
-        setTeacherSearch("")
         setFacultyValue("")
         setProgramValue("")
         setNumberOfGroups("")
         setSelectedModuleIds([])
         setLinks([])
-        setIsTeacherDropdownOpen(false)
         setIsFacultyDropdownOpen(false)
         setIsProgramDropdownOpen(false)
       }, 300)
       return () => clearTimeout(timeout)
     }
-  }, [isOpen, editData])
+  }, [isOpen])
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (teacherRef.current && !teacherRef.current.contains(e.target as Node))
-        setIsTeacherDropdownOpen(false)
       if (facultyRef.current && !facultyRef.current.contains(e.target as Node))
         setIsFacultyDropdownOpen(false)
       if (programRef.current && !programRef.current.contains(e.target as Node))
@@ -127,15 +104,6 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
   const updateLink = (index: number, field: "name" | "url", value: string) =>
     setLinks((prev) => prev.map((link, i) => (i === index ? { ...link, [field]: value } : link)))
 
-  // Filtered suggestions
-  const filteredTeachers = teachers.filter((t) => {
-    const fullName = `${t.last_name} ${t.first_name}`
-    return (
-      fullName.toLowerCase().includes(teacherSearch.toLowerCase()) ||
-      t.email.toLowerCase().includes(teacherSearch.toLowerCase())
-    )
-  })
-
   const filteredFaculties = faculties.filter((f) =>
     f.name.toLowerCase().includes(facultyValue.toLowerCase())
   )
@@ -146,12 +114,6 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
       || p.faculty_name.toLowerCase().includes(facultyValue.toLowerCase())
     return matchesFaculty && p.name.toLowerCase().includes(programValue.toLowerCase())
   })
-
-  const handleSelectTeacher = (teacher: Teacher) => {
-    setSelectedTeacherId(teacher.id)
-    setTeacherSearch(`${teacher.last_name} ${teacher.first_name}`)
-    setIsTeacherDropdownOpen(false)
-  }
 
   const handleSelectFaculty = (faculty: FacultyOption) => {
     setFacultyValue(faculty.name)
@@ -177,17 +139,14 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
   const handleConfirm = () => {
     if (!selectedDisciplineId || !selectedDiscipline) return
     if (!facultyValue.trim() || !programValue.trim()) return
-    if (selectedTeacherId === null) return
 
     const selectedModuleNumbers = modules
       .filter((m) => selectedModuleIds.includes(m.id))
       .map((m) => m.number)
 
     onSubmit({
-      teacherId: selectedTeacherId,
       disciplineId: selectedDisciplineId,
       discipline: selectedDiscipline.name,
-      teacherName: teacherSearch,
       faculty: facultyValue.trim(),
       program: programValue.trim(),
       numberOfGroups: parseInt(numberOfGroups) || 1,
@@ -200,7 +159,6 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
 
   const isConfirmDisabled =
     !selectedDisciplineId ||
-    selectedTeacherId === null ||
     !facultyValue.trim() ||
     !programValue.trim() ||
     !numberOfGroups ||
@@ -223,7 +181,7 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
         {/* Header */}
         <div className="px-4 pt-3 pb-2">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-[#2300fa]">{editData ? "Редактировать курс" : "Новая заявка"}</h2>
+            <h2 className="text-lg font-bold text-[#2300fa]">Новая заявка</h2>
             <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-full transition-colors">
               <X className="w-5 h-5 text-[#2300fa]" />
             </button>
@@ -260,39 +218,7 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
             </div>
           </div>
 
-          {/* 2. Teacher */}
-          <div className="mb-3 relative" ref={teacherRef}>
-            <label className="block font-bold text-[#2300fa] text-sm mb-1.5">Преподаватель</label>
-            <Input
-              placeholder="Поиск или введите имя преподавателя..."
-              value={teacherSearch}
-              onChange={(e) => {
-                setTeacherSearch(e.target.value)
-                setSelectedTeacherId(null)
-                setIsTeacherDropdownOpen(true)
-              }}
-              onFocus={() => setIsTeacherDropdownOpen(true)}
-              className="bg-gray-100 border-none rounded-lg h-9 text-sm"
-            />
-            {isTeacherDropdownOpen && filteredTeachers.length > 0 && (
-              <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-36 overflow-y-auto">
-                {filteredTeachers.map((teacher) => (
-                  <button
-                    key={teacher.id}
-                    onClick={() => handleSelectTeacher(teacher)}
-                    className={`w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 transition-colors ${
-                      selectedTeacherId === teacher.id ? "bg-gray-100 font-medium" : ""
-                    }`}
-                  >
-                    <span>{teacher.last_name} {teacher.first_name}</span>
-                    <span className="text-xs text-gray-400 ml-2">{teacher.email}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* 3. Faculty — free-text with suggestions */}
+          {/* 2. Faculty — free-text with suggestions */}
           <div className="mb-3 relative" ref={facultyRef}>
             <label className="block font-bold text-[#2300fa] text-sm mb-1.5">Факультет</label>
             <Input
@@ -322,7 +248,7 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
             )}
           </div>
 
-          {/* 4. Program — free-text with suggestions filtered by faculty */}
+          {/* 3. Program — free-text with suggestions filtered by faculty */}
           <div className="mb-3 relative" ref={programRef}>
             <label className="block font-bold text-[#2300fa] text-sm mb-1.5">Образовательная программа</label>
             <Input
@@ -352,7 +278,7 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
             )}
           </div>
 
-          {/* 5. Number of Groups */}
+          {/* 4. Number of Groups */}
           <div className="mb-3">
             <label className="block font-bold text-[#2300fa] text-sm mb-1.5">Количество групп</label>
             <Input
@@ -365,7 +291,7 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
             />
           </div>
 
-          {/* 6. Course Duration (Modules) */}
+          {/* 5. Course Duration (Modules) */}
           <div className="mb-3">
             <label className="block font-bold text-[#2300fa] text-sm mb-1.5">Продолжительность курса (модули)</label>
             <div className="flex gap-2">
@@ -385,7 +311,7 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
             </div>
           </div>
 
-          {/* 7. Links Table */}
+          {/* 6. Links Table */}
           <div className="mb-4">
             <div className="flex items-center justify-between mb-1.5">
               <label className="block font-bold text-[#2300fa] text-sm">Ссылки</label>
@@ -441,7 +367,7 @@ export function AddCourseDialog({ isOpen, onClose, onSubmit, editData }: AddCour
             disabled={isConfirmDisabled}
             className="w-full h-10 rounded-full bg-[#DCFF05] hover:bg-[#c9eb00] text-black font-medium border-2 border-black disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {editData ? "Сохранить изменения" : "Подтвердить"}
+            Подтвердить
           </Button>
         </div>
       </div>

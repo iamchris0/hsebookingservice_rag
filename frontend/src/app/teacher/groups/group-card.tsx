@@ -75,8 +75,7 @@ interface GroupCardProps {
   program: string
   modules: number[]
   groupsCount: number
-  managerFirstName?: string | null
-  managerLastName?: string | null
+  availableGroups?: number
   studentFirstName?: string
   studentLastName?: string
   studentEmail?: string
@@ -136,11 +135,9 @@ function ModulesRow({ groupsCount, modules }: { groupsCount: number; modules: nu
   )
 }
 
-// ─── Card: Groups without an assistant ───────────────────────────────────────
-function NoAssistantCard({ discipline, faculty, program, modules, groupsCount, managerFirstName, managerLastName, onSelectAssistant }: GroupCardProps) {
-  const managerName = managerFirstName && managerLastName
-    ? `${managerLastName} ${managerFirstName}`
-    : "—"
+// ─── Card: Groups with open slots (none, or not all, assistants assigned) ────
+function NoAssistantCard({ discipline, faculty, program, modules, groupsCount, availableGroups, onSelectAssistant }: GroupCardProps) {
+  const slotsLabel = availableGroups != null ? `${availableGroups} из ${groupsCount}` : String(groupsCount)
 
   return (
     <Card className="bg-white shadow-sm hover:shadow-lg transition-shadow duration-300 border border-gray-100 rounded-2xl overflow-hidden flex flex-col">
@@ -149,7 +146,7 @@ function NoAssistantCard({ discipline, faculty, program, modules, groupsCount, m
         {/* Each field on its own row, 2px gap */}
         <div className="flex flex-col gap-2">
           <InfoRow icon={<Tag className="h-3.5 w-3.5 text-black" />} label="Дисциплина" value={discipline} />
-          <InfoRow icon={<UserCircle2 className="h-3.5 w-3.5 text-black" />} label="Создано" value={managerName} />
+          <InfoRow icon={<UserCircle2 className="h-3.5 w-3.5 text-black" />} label="Свободно групп" value={slotsLabel} />
           <InfoRow icon={<GraduationCap className="h-3.5 w-3.5 text-black" />} label="Факультет" value={faculty} />
           <InfoRow icon={<BookOpen className="h-3.5 w-3.5 text-black" />} label="Образовательная программа" value={program} />
         </div>

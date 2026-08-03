@@ -1,12 +1,14 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { Plus } from "lucide-react"
 import { toast } from "sonner"
 import { GroupCard } from "./group-card"
 import { GroupDetailsDialog } from "./group-details-dialog"
 import { SelectAssistantDialog } from "./select-assistant-dialog"
+import { CreateCourseDialog } from "./create-course-dialog"
 import { CollapsibleSection } from "./collapsible-section"
-import { TeacherOffer, TeacherBooking } from "../types"
+import { TeacherOffer, TeacherBooking, CreateCourseData } from "../types"
 import { toDisplayDiscipline } from "@/lib/disciplines"
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001"
@@ -18,6 +20,7 @@ export function MyGroupsSection() {
   const [isLoading, setIsLoading] = useState(true)
   const [selectedItem, setSelectedItem] = useState<SelectedItem>(null)
   const [selectAssistantOffer, setSelectAssistantOffer] = useState<TeacherOffer | null>(null)
+  const [isCreateCourseOpen, setIsCreateCourseOpen] = useState(false)
 
   const fetchGroups = async () => {
     try {
@@ -73,8 +76,36 @@ export function MyGroupsSection() {
     }
   }
 
-  // Offers with no bookings yet → "groups without assistant"
-  const withoutAssistant = offers.filter((o) => o.bookings.length === 0)
+  const handleCreateCourse = async (data: CreateCourseData) => {
+    try {
+      const token = localStorage.getItem("token")
+      const response = await fetch(`${BACKEND_URL}/api/teacher/offers`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          disciplineId: data.disciplineId,
+          facultyName: data.faculty,
+          programName: data.program,
+          totalGroups: data.numberOfGroups,
+          moduleIds: data.moduleIds,
+          links: data.links,
+        }),
+      })
+      if (!response.ok) throw new Error("Не удалось создать курс")
+      await fetchGroups()
+      toast.success("Курс создан.")
+    } catch {
+      toast.error("Не удалось создать курс.")
+    }
+  }
+
+  // Offers with open slots → assignable, regardless of how many assistants
+  // are already assigned (fixes: available slots used to vanish from this
+  // list as soon as the offer got its first assistant)
+  const withoutAssistant = offers.filter((o) => o.available_groups > 0)
   // All bookings across offers → "my groups", pending first then active
   const myGroupItems = offers
     .flatMap((o) => o.bookings.map((b: TeacherBooking) => ({ offer: o, booking: b })))
@@ -104,20 +135,36 @@ export function MyGroupsSection() {
         offerAvailableGroups={selectAssistantOffer?.available_groups ?? 0}
       />
 
+      <CreateCourseDialog
+        isOpen={isCreateCourseOpen}
+        onClose={() => setIsCreateCourseOpen(false)}
+        onSubmit={handleCreateCourse}
+      />
+
+      <div className="flex justify-end">
+        <button
+          onClick={() => setIsCreateCourseOpen(true)}
+          className="flex-shrink-0 px-8 py-3 text-sm font-medium bg-[#DCFF05] hover:bg-[#c9eb00] text-black border border-black rounded-xl transition-all flex items-center justify-center gap-2"
+        >
+          <Plus className="w-4 h-4" />
+          Курс
+        </button>
+      </div>
+
       {isLoading && (
         <div className="text-sm text-gray-500 p-4">Загрузка...</div>
       )}
 
       {!isLoading && (
         <>
-          {/* Section 1: Groups without an assistant */}
+          {/* Section 1: Groups with open slots */}
           <CollapsibleSection
-            title="Группы без ассистента"
+            title="Группы со свободными местами"
             count={withoutAssistant.length}
             defaultOpen={true}
           >
             {withoutAssistant.length === 0 ? (
-              <p className="text-sm text-gray-400 italic p-2">Группы без ассистента отсутствуют.</p>
+              <p className="text-sm text-gray-400 italic p-2">Свободных мест нет.</p>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {withoutAssistant.map((offer) => (
@@ -129,8 +176,7 @@ export function MyGroupsSection() {
                     program={offer.program}
                     modules={offer.modules}
                     groupsCount={offer.total_groups}
-                    managerFirstName={offer.manager_first_name}
-                    managerLastName={offer.manager_last_name}
+                    availableGroups={offer.available_groups}
                     hideAssistantName={true}
                     onSelectAssistant={() => setSelectAssistantOffer(offer)}
                   />

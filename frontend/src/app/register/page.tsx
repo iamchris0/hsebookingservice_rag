@@ -5,12 +5,11 @@ import { useRouter } from 'next/navigation';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
 
-type Role = 'student' | 'teacher' | 'manager';
+type Role = 'student' | 'teacher';
 
 const ROLE_LABELS: Record<Role, string> = {
   student: 'Студент',
   teacher: 'Преподаватель',
-  manager: 'Менеджер',
 };
 
 export default function Register() {
@@ -25,7 +24,7 @@ export default function Register() {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
-  const isStaff = role === 'teacher' || role === 'manager';
+  const isStaff = role === 'teacher';
 
   const inputStyle = {
     backgroundColor: '#f8f8f8',
@@ -84,10 +83,8 @@ export default function Register() {
 
       if (role === 'student') {
         router.push('/survey');
-      } else if (role === 'teacher') {
-        router.push('/teacher');
       } else {
-        router.push('/manager');
+        router.push('/teacher');
       }
     } catch {
       setError('Ошибка подключения к серверу');
@@ -166,7 +163,7 @@ export default function Register() {
 
           {/* Role selector */}
           <div className="flex gap-2 pt-1">
-            {(['student', 'teacher', 'manager'] as Role[]).map((r) => (
+            {(['student', 'teacher'] as Role[]).map((r) => (
               <button
                 key={r}
                 type="button"

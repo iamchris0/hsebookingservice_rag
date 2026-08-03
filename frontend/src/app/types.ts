@@ -2,7 +2,7 @@
 // Сюда можно складывать интерфейсы/типы, которые
 // используются в разных страницах и компонентах.
 
-export type UserRole = "student" | "teacher" | "manager";
+export type UserRole = "student" | "teacher";
 
 export interface User {
   email: string;

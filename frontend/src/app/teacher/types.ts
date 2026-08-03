@@ -74,9 +74,46 @@ export interface TeacherOffer {
   program: string
   total_groups: number
   modules: number[]
-  manager_first_name: string | null
-  manager_last_name: string | null
   available_groups: number
   links: { name: string; url: string }[]
   bookings: TeacherBooking[]
+}
+
+// Course creation (POST /api/teacher/offers)
+
+export interface LinkRow {
+  name: string
+  url: string
+}
+
+export interface DisciplineOption {
+  id: number
+  name: string
+}
+
+export interface FacultyOption {
+  id: number
+  name: string
+}
+
+export interface ProgramOption {
+  id: number
+  name: string
+  faculty_name: string
+}
+
+export interface ModuleOption {
+  id: number
+  number: number
+}
+
+export interface CreateCourseData {
+  disciplineId: number
+  discipline: string      // display name
+  program: string         // free-text program name
+  faculty: string         // free-text faculty name
+  numberOfGroups: number
+  duration: number[]      // selected module numbers
+  moduleIds: number[]     // selected module IDs
+  links: LinkRow[]
 }

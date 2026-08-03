@@ -205,7 +205,7 @@ app.post<{
     firstName?: string;
     lastName?: string;
     middleName?: string;
-    role: "student" | "teacher" | "manager";
+    role: "student" | "teacher";
     adminPassword?: string;
   };
 }>("/api/register", async (request, reply) => {
@@ -215,15 +215,15 @@ app.post<{
     return reply.code(400).send({ error: "Email, пароль и роль обязательны" });
   }
 
-  if ((role === "teacher" || role === "manager") && (!firstName.trim() || !lastName.trim())) {
+  if (role === "teacher" && (!firstName.trim() || !lastName.trim())) {
     return reply.code(400).send({ error: "Для данной роли необходимо указать имя и фамилию" });
   }
 
-  if (!["student", "teacher", "manager"].includes(role)) {
+  if (!["student", "teacher"].includes(role)) {
     return reply.code(400).send({ error: "Некорректная роль" });
   }
 
-  if (role === "teacher" || role === "manager") {
+  if (role === "teacher") {
     const staffSecret = process.env.STAFF_SECRET;
     if (!staffSecret || adminPassword !== staffSecret) {
       return reply.code(403).send({ error: "Неверный пароль доступа" });
@@ -355,27 +355,6 @@ app.get(
   }
 );
 
-// ─── Teacher directory ────────────────────────────────────────────────────────
-
-app.get(
-  "/api/teachers",
-  { preHandler: [app.authenticate] },
-  async (_request, _reply) => {
-    const client = await app.pg.connect();
-    try {
-      const result = await client.query(
-        `SELECT id, first_name, last_name, email
-         FROM dc_new.users
-         WHERE role = 'teacher'
-         ORDER BY last_name, first_name`
-      );
-      return result.rows;
-    } finally {
-      client.release();
-    }
-  }
-);
-
 // ─── Student endpoints ────────────────────────────────────────────────────────
 
 // GET /api/student/my-groups — active bookings for the current student
@@ -454,7 +433,7 @@ app.get(
           ), ARRAY[]::int[]) AS modules,
           (co.total_groups - COALESCE((
             SELECT SUM(COALESCE(b.num_groups, 1)) FROM dc_new.bookings b
-            WHERE b.offer_id = co.id AND b.status = 'active'
+            WHERE b.offer_id = co.id AND b.status IN ('active', 'pending')
           ), 0)) AS available_groups
         FROM dc_new.course_offers co
         JOIN dc_new.disciplines d ON co.discipline_id = d.id
@@ -464,7 +443,7 @@ app.get(
         WHERE co.status = 'open'
           AND (co.total_groups - COALESCE((
             SELECT SUM(COALESCE(b.num_groups, 1)) FROM dc_new.bookings b
-            WHERE b.offer_id = co.id AND b.status = 'active'
+            WHERE b.offer_id = co.id AND b.status IN ('active', 'pending')
           ), 0)) > 0
         ORDER BY co.created_at DESC`
       );
@@ -727,7 +706,7 @@ app.post<{
            co.total_groups,
            COALESCE((
              SELECT SUM(COALESCE(b.num_groups, 1)) FROM dc_new.bookings b
-             WHERE b.offer_id = co.id AND b.status = 'active'
+             WHERE b.offer_id = co.id AND b.status IN ('active', 'pending')
            ), 0) AS booked_count
          FROM dc_new.course_offers co
          WHERE co.id = $1 AND co.status = 'open'`,
@@ -779,65 +758,12 @@ app.post<{
   }
 );
 
-// ─── Manager endpoints ────────────────────────────────────────────────────────
+// ─── Teacher endpoints ────────────────────────────────────────────────────────
 
-// GET /api/manager/offers — all open offers
-app.get(
-  "/api/manager/offers",
-  { preHandler: [app.authenticate] },
-  async (request, reply) => {
-    const user = request.user as { role: string };
-    if (user.role !== "manager") {
-      return reply.code(403).send({ error: "Forbidden" });
-    }
-
-    const client = await app.pg.connect();
-    try {
-      const result = await client.query(
-        `SELECT
-           co.id,
-           d.name  AS discipline,
-           f.name  AS faculty,
-           p.name  AS program,
-           co.total_groups,
-           co.teacher_id,
-           u.first_name,
-           u.last_name,
-           u.email AS teacher_email,
-           mg.first_name AS manager_first_name,
-           mg.last_name  AS manager_last_name,
-           COALESCE((
-             SELECT array_agg(m.number ORDER BY m.number)
-             FROM dc_new.course_offer_modules com
-             JOIN dc_new.modules m ON com.module_id = m.id
-             WHERE com.offer_id = co.id
-           ), ARRAY[]::int[]) AS modules,
-           COALESCE((
-             SELECT json_agg(json_build_object('name', col.name, 'url', col.url)
-                             ORDER BY col.sort_order)
-             FROM dc_new.course_offer_links col
-             WHERE col.offer_id = co.id
-           ), '[]'::json) AS links
-         FROM dc_new.course_offers co
-         JOIN dc_new.disciplines d ON co.discipline_id = d.id
-         JOIN dc_new.programs    p ON co.program_id    = p.id
-         JOIN dc_new.faculties   f ON p.faculty_id     = f.id
-         JOIN dc_new.users       u ON co.teacher_id    = u.id
-         LEFT JOIN dc_new.users mg ON mg.id = co.manager_id
-         WHERE co.status = 'open'
-         ORDER BY co.created_at DESC`
-      );
-      return result.rows;
-    } finally {
-      client.release();
-    }
-  }
-);
-
-// POST /api/manager/offers — create a new offer (upserts faculty and program by name)
+// POST /api/teacher/offers — teacher creates their own course offer
+// (upserts faculty and program by name)
 app.post<{
   Body: {
-    teacherId: number;
     disciplineId: number;
     facultyName: string;
     programName: string;
@@ -846,17 +772,17 @@ app.post<{
     links: { name: string; url: string }[];
   };
 }>(
-  "/api/manager/offers",
+  "/api/teacher/offers",
   { preHandler: [app.authenticate] },
   async (request, reply) => {
     const user = request.user as { id: number; role: string };
-    if (user.role !== "manager") {
+    if (user.role !== "teacher") {
       return reply.code(403).send({ error: "Forbidden" });
     }
 
-    const { teacherId, disciplineId, facultyName, programName, totalGroups, moduleIds, links } = request.body;
+    const { disciplineId, facultyName, programName, totalGroups, moduleIds, links } = request.body;
 
-    if (!teacherId || !disciplineId || !facultyName?.trim() || !programName?.trim() || !totalGroups || !moduleIds?.length) {
+    if (!disciplineId || !facultyName?.trim() || !programName?.trim() || !totalGroups || !moduleIds?.length) {
       return reply.code(400).send({ error: "Некорректные данные запроса" });
     }
 
@@ -884,10 +810,10 @@ app.post<{
 
       // Create offer
       const result = await client.query(
-        `INSERT INTO dc_new.course_offers (teacher_id, manager_id, discipline_id, program_id, total_groups)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO dc_new.course_offers (teacher_id, discipline_id, program_id, total_groups)
+         VALUES ($1, $2, $3, $4)
          RETURNING id`,
-        [teacherId, user.id, disciplineId, programId, totalGroups]
+        [user.id, disciplineId, programId, totalGroups]
       );
 
       const offerId = result.rows[0].id;
@@ -919,74 +845,6 @@ app.post<{
   }
 );
 
-// GET /api/manager/groups-stats — booked vs total per discipline
-app.get(
-  "/api/manager/groups-stats",
-  { preHandler: [app.authenticate] },
-  async (request, reply) => {
-    const user = request.user as { role: string };
-    if (user.role !== "manager") {
-      return reply.code(403).send({ error: "Forbidden" });
-    }
-
-    const client = await app.pg.connect();
-    try {
-      const result = await client.query(
-        `SELECT
-           d.name AS discipline,
-           SUM(co.total_groups) AS total_groups,
-           SUM(co.total_groups - COALESCE((
-             SELECT SUM(COALESCE(b.num_groups, 1)) FROM dc_new.bookings b
-             WHERE b.offer_id = co.id AND b.status = 'active'
-           ), 0)) AS groups_without_assistant
-         FROM dc_new.course_offers co
-         JOIN dc_new.disciplines d ON co.discipline_id = d.id
-         WHERE co.status = 'open'
-         GROUP BY d.name
-         ORDER BY d.name`
-      );
-      return result.rows;
-    } finally {
-      client.release();
-    }
-  }
-);
-
-// DELETE /api/manager/offers/:id — close an offer
-app.delete<{ Params: { id: string } }>(
-  "/api/manager/offers/:id",
-  { preHandler: [app.authenticate] },
-  async (request, reply) => {
-    const user = request.user as { role: string };
-    if (user.role !== "manager") {
-      return reply.code(403).send({ error: "Forbidden" });
-    }
-
-    const offerId = parseInt(request.params.id, 10);
-    if (isNaN(offerId)) {
-      return reply.code(400).send({ error: "Некорректный id" });
-    }
-
-    const client = await app.pg.connect();
-    try {
-      const result = await client.query(
-        `UPDATE dc_new.course_offers SET status = 'closed', updated_at = now()
-         WHERE id = $1 AND status = 'open'
-         RETURNING id`,
-        [offerId]
-      );
-      if (result.rowCount === 0) {
-        return reply.code(404).send({ error: "Предложение не найдено" });
-      }
-      return { success: true };
-    } finally {
-      client.release();
-    }
-  }
-);
-
-// ─── Teacher endpoints ────────────────────────────────────────────────────────
-
 // GET /api/teacher/groups — open offers for the current teacher with bookings
 app.get(
   "/api/teacher/groups",
@@ -1006,11 +864,9 @@ app.get(
            f.name AS faculty,
            p.name AS program,
            co.total_groups,
-           mg.first_name AS manager_first_name,
-           mg.last_name  AS manager_last_name,
            (co.total_groups - COALESCE((
              SELECT SUM(COALESCE(b2.num_groups, 1)) FROM dc_new.bookings b2
-             WHERE b2.offer_id = co.id AND b2.status = 'active'
+             WHERE b2.offer_id = co.id AND b2.status IN ('active', 'pending')
            ), 0)) AS available_groups,
            COALESCE((
              SELECT array_agg(m.number ORDER BY m.number)
@@ -1043,7 +899,6 @@ app.get(
          JOIN dc_new.disciplines d ON co.discipline_id = d.id
          JOIN dc_new.programs    p ON co.program_id    = p.id
          JOIN dc_new.faculties   f ON p.faculty_id     = f.id
-         LEFT JOIN dc_new.users mg ON mg.id = co.manager_id
          WHERE co.teacher_id = $1 AND co.status = 'open'
          ORDER BY co.created_at DESC`,
         [user.id]

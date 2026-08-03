@@ -67,11 +67,9 @@ export function useAuth(requiredRole?: string | string[]) {
         if (requiredRole && userData.role !== requiredRole) {
           // Неправильная роль - перенаправляем на соответствующую страницу
           if (userData.role === 'teacher') {
-            router.push('/manager');
+            router.push('/teacher');
           } else if (userData.role === 'student') {
             router.push('/student');
-          } else if (userData.role === 'manager') {
-            router.push('/manager');
           } else {
             router.push('/');
           }

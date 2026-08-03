@@ -33,10 +33,6 @@ export function GroupDetailsDialog({ isOpen, onClose, offer, booking }: GroupDet
     if (e.target === e.currentTarget) onClose()
   }
 
-  const managerName = offer.manager_first_name && offer.manager_last_name
-    ? `${offer.manager_last_name} ${offer.manager_first_name}`
-    : null
-
   return (
     <div
       className={`fixed inset-0 z-50 flex items-center justify-center transition-all duration-300 ${
@@ -54,14 +50,6 @@ export function GroupDetailsDialog({ isOpen, onClose, offer, booking }: GroupDet
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3 min-w-0">
               <h2 className="text-lg font-bold text-[#2300fa] flex-shrink-0">Group Details</h2>
-              {managerName && (
-                <div className="flex items-center gap-1.5 bg-[#f0f0ff] border border-[#2300fa]/20 rounded-lg px-2.5 py-1 min-w-0">
-                  <UserCircle2 className="w-3.5 h-3.5 text-[#2300fa] flex-shrink-0" />
-                  <span className="text-xs text-[#2300fa] truncate">
-                    Created by: <span className="font-bold">{managerName}</span>
-                  </span>
-                </div>
-              )}
             </div>
             <button
               onClick={onClose}
