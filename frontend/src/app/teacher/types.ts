@@ -118,3 +118,38 @@ export interface CreateCourseData {
   moduleIds: number[]     // selected module IDs
   links: LinkRow[]
 }
+
+// Full student profile (GET /api/teacher/students/:id)
+
+export interface StudentPriorityDetail {
+  priority: number
+  discipline: string
+  desiredGroupSize: number | null
+  answers: Record<string, string>
+}
+
+export interface StudentDetails {
+  id: number
+  firstName: string
+  lastName: string
+  middleName: string | null
+  email: string
+  telegram: string | null
+  birthday: string | null
+  citizenship: string | null
+  phone: string | null
+  eduFaculty: string | null
+  eduProgram: string | null
+  studyYear: number | null
+  debts: string | null
+  eduRating: string | null
+  digitalLiteracyScore: string | null
+  programmingScore: string | null
+  dataAnalysisScore: string | null
+  motivation: string | null
+  achievements: string | null
+  priorCourses: string | null
+  recommendationAvailable: boolean
+  recommendationEmail: string | null
+  priorities: StudentPriorityDetail[]
+}

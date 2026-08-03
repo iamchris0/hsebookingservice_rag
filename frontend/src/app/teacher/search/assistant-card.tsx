@@ -5,6 +5,7 @@ import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Star, GraduationCap, BookOpen, Mail, Send } from "lucide-react"
 import { Assistant } from "../types"
+import { StudentDetailsDialog } from "./student-details-dialog"
 
 type AssistantCardProps = Assistant
 
@@ -34,6 +35,7 @@ function InfoRow({ icon, label, value }: InfoRowProps) {
 }
 
 export function AssistantCard({
+  id,
   name,
   skills,
   faculty,
@@ -43,9 +45,11 @@ export function AssistantCard({
   isFavorite,
 }: AssistantCardProps) {
   const [favorite, setFavorite] = useState(isFavorite)
+  const [detailsOpen, setDetailsOpen] = useState(false)
 
   return (
-    <Card className="bg-white shadow-sm hover:shadow-lg transition-shadow duration-300 border border-gray-100 rounded-2xl overflow-hidden flex flex-col">
+    <>
+      <Card className="bg-white shadow-sm hover:shadow-lg transition-shadow duration-300 border border-gray-100 rounded-2xl overflow-hidden flex flex-col">
         <CardContent className="px-4 pt-4 flex-1 space-y-3">
 
           {/* 1. Name + Star */}
@@ -133,10 +137,18 @@ export function AssistantCard({
           <Button
             variant="outline"
             className="w-full rounded-full border-[#2300fa] text-[#2300fa] bg-transparent hover:bg-blue-50 text-sm h-9"
+            onClick={() => setDetailsOpen(true)}
           >
             Подробнее
           </Button>
         </CardFooter>
       </Card>
+
+      <StudentDetailsDialog
+        isOpen={detailsOpen}
+        onClose={() => setDetailsOpen(false)}
+        studentId={id}
+      />
+    </>
   )
 }

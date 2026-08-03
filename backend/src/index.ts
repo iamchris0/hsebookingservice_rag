@@ -1035,6 +1035,97 @@ app.get(
   }
 );
 
+// GET /api/teacher/students/:id — full survey answers for one student
+app.get<{ Params: { id: string } }>(
+  "/api/teacher/students/:id",
+  { preHandler: [app.authenticate] },
+  async (request, reply) => {
+    const user = request.user as { role: string };
+    if (user.role !== "teacher") {
+      return reply.code(403).send({ error: "Forbidden" });
+    }
+
+    const studentId = parseInt(request.params.id, 10);
+    if (isNaN(studentId)) {
+      return reply.code(400).send({ error: "Некорректный id" });
+    }
+
+    const client = await app.pg.connect();
+    try {
+      const profileResult = await client.query(
+        `SELECT
+           u.id, u.first_name, u.last_name, u.middle_name, u.email,
+           sp.telegram, sp.birthday, sp.citizenship, sp.phone,
+           sp.edu_faculty, sp.edu_program, sp.study_year, sp.debts, sp.edu_rating,
+           sp.digital_literacy_score, sp.python_score, sp.data_analysis_score,
+           sp.motivation_text, sp.achievements, sp.prior_courses, sp.experience,
+           sp.recommendation_available, sp.recommendation_email
+         FROM dc_new.users u
+         LEFT JOIN dc_new.student_profiles sp ON sp.user_id = u.id
+         WHERE u.id = $1 AND u.role = 'student'`,
+        [studentId]
+      );
+
+      if (profileResult.rows.length === 0) {
+        return reply.code(404).send({ error: "Студент не найден" });
+      }
+
+      const row = profileResult.rows[0];
+
+      let experience: Record<string, Record<string, string>> = {};
+      try { experience = JSON.parse(row.experience ?? "{}"); } catch { /* malformed, ignore */ }
+
+      const preferencesResult = await client.query(
+        `SELECT spr.priority, d.name AS discipline, spr.desired_group_size
+         FROM dc_new.student_preferences spr
+         JOIN dc_new.disciplines d ON d.id = spr.discipline_id
+         WHERE spr.student_id = $1
+         ORDER BY spr.priority`,
+        [studentId]
+      );
+
+      const priorities = preferencesResult.rows.map((p: {
+        priority: number;
+        discipline: string;
+        desired_group_size: number;
+      }) => ({
+        priority: p.priority,
+        discipline: p.discipline,
+        desiredGroupSize: p.desired_group_size,
+        answers: experience[String(p.priority)] ?? {},
+      }));
+
+      return {
+        id: row.id,
+        firstName: row.first_name,
+        lastName: row.last_name,
+        middleName: row.middle_name,
+        email: row.email,
+        telegram: row.telegram,
+        birthday: row.birthday,
+        citizenship: row.citizenship,
+        phone: row.phone,
+        eduFaculty: row.edu_faculty,
+        eduProgram: row.edu_program,
+        studyYear: row.study_year,
+        debts: row.debts,
+        eduRating: row.edu_rating,
+        digitalLiteracyScore: row.digital_literacy_score,
+        programmingScore: row.python_score,
+        dataAnalysisScore: row.data_analysis_score,
+        motivation: row.motivation_text,
+        achievements: row.achievements,
+        priorCourses: row.prior_courses,
+        recommendationAvailable: row.recommendation_available,
+        recommendationEmail: row.recommendation_email,
+        priorities,
+      };
+    } finally {
+      client.release();
+    }
+  }
+);
+
 // POST /api/teacher/assign — teacher assigns a student assistant to their offer
 app.post<{
   Body: { offerId: number; studentId: number; numGroups: number };
