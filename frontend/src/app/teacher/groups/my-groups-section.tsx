@@ -204,7 +204,7 @@ export function MyGroupsSection() {
                     faculty={offer.faculty}
                     program={offer.program}
                     modules={offer.modules}
-                    groupsCount={offer.total_groups}
+                    groupsCount={booking.num_groups}
                     studentFirstName={booking.student_first_name}
                     studentLastName={booking.student_last_name}
                     studentEmail={booking.student_email}

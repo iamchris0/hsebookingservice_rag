@@ -121,7 +121,7 @@ export function GroupDetailsDialog({ isOpen, onClose, offer, booking }: GroupDet
                 <span className="text-xs font-bold text-[#2300fa]">Группы</span>
               </div>
               <div className="h-9 flex items-center justify-center text-sm font-semibold bg-gray-100 rounded-lg">
-                {offer.total_groups}
+                {booking ? booking.num_groups : offer.total_groups}
               </div>
             </div>
             <div style={{ flex: "0 0 calc(80% - 0.75rem)" }}>

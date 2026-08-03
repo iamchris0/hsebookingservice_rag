@@ -885,6 +885,7 @@ app.get(
                'booking_id',         b.id,
                'status',             b.status,
                'payment_type',       b.payment_type,
+               'num_groups',         b.num_groups,
                'student_first_name', s.first_name,
                'student_last_name',  s.last_name,
                'student_email',      s.email,
