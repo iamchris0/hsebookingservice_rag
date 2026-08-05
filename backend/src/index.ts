@@ -372,6 +372,7 @@ app.get(
       const result = await client.query(
         `SELECT
            b.id,
+           b.num_groups,
            d.name  AS discipline,
            p.name  AS program,
            f.name  AS faculty,

@@ -79,6 +79,7 @@ export default function MyGroupsPage() {
 
         const mapped: MyGroupCardProps[] = data.map((row: {
           id: number
+          num_groups: number
           discipline: string
           faculty: string
           program: string
@@ -91,7 +92,7 @@ export default function MyGroupsPage() {
         }) => ({
           id: row.id,
           discipline: toDisplayDiscipline(row.discipline),
-          numberOfGroups: 1,
+          numberOfGroups: row.num_groups,
           faculty: row.faculty ?? "",
           program: row.program,
           modules: row.modules ?? [],
