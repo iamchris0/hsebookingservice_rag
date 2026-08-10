@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Trash2, Mail, BookOpen, GraduationCap, UsersRound, Send, DollarSign, CreditCard, UserCircle2, Tag } from "lucide-react"
+import { Trash2, Edit, Mail, BookOpen, GraduationCap, UsersRound, Send, DollarSign, CreditCard, UserCircle2, Tag } from "lucide-react"
 
 function ConfirmDeleteDialog({
   isOpen,
@@ -85,6 +85,7 @@ interface GroupCardProps {
   hideAssistantName?: boolean
   onMoreDetails?: () => void
   onSelectAssistant?: () => void
+  onEdit?: () => void
   onAccept?: () => void
   onDelete?: () => void
 }
@@ -136,12 +137,25 @@ function ModulesRow({ groupsCount, modules }: { groupsCount: number; modules: nu
 }
 
 // ─── Card: Groups with open slots (none, or not all, assistants assigned) ────
-function NoAssistantCard({ discipline, faculty, program, modules, groupsCount, availableGroups, onSelectAssistant }: GroupCardProps) {
+function NoAssistantCard({ discipline, faculty, program, modules, groupsCount, availableGroups, onSelectAssistant, onEdit }: GroupCardProps) {
   const slotsLabel = availableGroups != null ? `${availableGroups} из ${groupsCount}` : String(groupsCount)
 
   return (
     <Card className="bg-white shadow-sm hover:shadow-lg transition-shadow duration-300 border border-gray-100 rounded-2xl overflow-hidden flex flex-col">
       <CardContent className="px-4 pb-1 flex-1 space-y-2.5">
+
+        {/* Edit request */}
+        <div className="flex justify-end -mb-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-gray-400 hover:text-[#2300fa] hover:bg-gray-100"
+            title="Редактировать заявку"
+            onClick={onEdit}
+          >
+            <Edit className="h-3.5 w-3.5" />
+          </Button>
+        </div>
 
         {/* Each field on its own row, 2px gap */}
         <div className="flex flex-col gap-2">

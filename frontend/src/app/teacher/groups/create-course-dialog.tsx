@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from "react"
 import { X, Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { CreateCourseData, DisciplineOption, FacultyOption, LinkRow, ModuleOption, ProgramOption } from "../types"
+import { CreateCourseData, DisciplineOption, FacultyOption, LinkRow, ModuleOption, ProgramOption, TeacherOffer } from "../types"
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001"
 
@@ -12,9 +12,11 @@ interface CreateCourseDialogProps {
   isOpen: boolean
   onClose: () => void
   onSubmit: (data: CreateCourseData) => void
+  /** When set, the dialog edits this offer instead of creating a new one. */
+  editOffer?: TeacherOffer | null
 }
 
-export function CreateCourseDialog({ isOpen, onClose, onSubmit }: CreateCourseDialogProps) {
+export function CreateCourseDialog({ isOpen, onClose, onSubmit, editOffer }: CreateCourseDialogProps) {
   const [isVisible, setIsVisible] = useState(false)
   const [isAnimating, setIsAnimating] = useState(false)
 
@@ -56,6 +58,20 @@ export function CreateCourseDialog({ isOpen, onClose, onSubmit }: CreateCourseDi
       setModules(m)
     }).catch(() => {})
   }, [])
+
+  // Prefill from the offer being edited. Depends on `modules` because the
+  // offer carries module numbers, which only map to ids once they're loaded.
+  useEffect(() => {
+    if (!isOpen || !editOffer) return
+    setSelectedDisciplineId(editOffer.discipline_id)
+    setFacultyValue(editOffer.faculty ?? "")
+    setProgramValue(editOffer.program ?? "")
+    setNumberOfGroups(String(editOffer.total_groups))
+    setLinks(editOffer.links ?? [])
+    setSelectedModuleIds(
+      modules.filter((m) => (editOffer.modules ?? []).includes(m.number)).map((m) => m.id)
+    )
+  }, [isOpen, editOffer, modules])
 
   useEffect(() => {
     if (isOpen) {
@@ -181,7 +197,9 @@ export function CreateCourseDialog({ isOpen, onClose, onSubmit }: CreateCourseDi
         {/* Header */}
         <div className="px-4 pt-3 pb-2">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-[#2300fa]">Новая заявка</h2>
+            <h2 className="text-lg font-bold text-[#2300fa]">
+              {editOffer ? "Редактировать заявку" : "Новая заявка"}
+            </h2>
             <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-full transition-colors">
               <X className="w-5 h-5 text-[#2300fa]" />
             </button>
@@ -367,7 +385,7 @@ export function CreateCourseDialog({ isOpen, onClose, onSubmit }: CreateCourseDi
             disabled={isConfirmDisabled}
             className="w-full h-10 rounded-full bg-[#DCFF05] hover:bg-[#c9eb00] text-black font-medium border-2 border-black disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Подтвердить
+            {editOffer ? "Сохранить" : "Подтвердить"}
           </Button>
         </div>
       </div>

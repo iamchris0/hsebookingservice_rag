@@ -70,6 +70,7 @@ export interface TeacherBooking {
 
 export interface TeacherOffer {
   id: number
+  discipline_id: number
   discipline: string
   faculty: string
   program: string

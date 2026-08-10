@@ -21,6 +21,7 @@ export function MyGroupsSection() {
   const [selectedItem, setSelectedItem] = useState<SelectedItem>(null)
   const [selectAssistantOffer, setSelectAssistantOffer] = useState<TeacherOffer | null>(null)
   const [isCreateCourseOpen, setIsCreateCourseOpen] = useState(false)
+  const [editingOffer, setEditingOffer] = useState<TeacherOffer | null>(null)
 
   const fetchGroups = async () => {
     try {
@@ -102,6 +103,38 @@ export function MyGroupsSection() {
     }
   }
 
+  const handleUpdateCourse = async (data: CreateCourseData) => {
+    if (!editingOffer) return
+    try {
+      const token = localStorage.getItem("token")
+      const response = await fetch(`${BACKEND_URL}/api/teacher/offers/${editingOffer.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          disciplineId: data.disciplineId,
+          facultyName: data.faculty,
+          programName: data.program,
+          totalGroups: data.numberOfGroups,
+          moduleIds: data.moduleIds,
+          links: data.links,
+        }),
+      })
+      if (!response.ok) {
+        const body = await response.json().catch(() => null)
+        throw new Error(body?.error ?? "Не удалось сохранить изменения")
+      }
+      await fetchGroups()
+      toast.success("Изменения сохранены.")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Не удалось сохранить изменения.")
+    } finally {
+      setEditingOffer(null)
+    }
+  }
+
   // Offers with open slots → assignable, regardless of how many assistants
   // are already assigned (fixes: available slots used to vanish from this
   // list as soon as the offer got its first assistant)
@@ -139,6 +172,13 @@ export function MyGroupsSection() {
         isOpen={isCreateCourseOpen}
         onClose={() => setIsCreateCourseOpen(false)}
         onSubmit={handleCreateCourse}
+      />
+
+      <CreateCourseDialog
+        isOpen={editingOffer !== null}
+        onClose={() => setEditingOffer(null)}
+        onSubmit={handleUpdateCourse}
+        editOffer={editingOffer}
       />
 
       <div className="flex justify-end">
@@ -179,6 +219,7 @@ export function MyGroupsSection() {
                     availableGroups={offer.available_groups}
                     hideAssistantName={true}
                     onSelectAssistant={() => setSelectAssistantOffer(offer)}
+                    onEdit={() => setEditingOffer(offer)}
                   />
                 ))}
               </div>
