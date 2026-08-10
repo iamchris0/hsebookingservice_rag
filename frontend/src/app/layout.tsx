@@ -11,7 +11,7 @@ const roboto = Roboto({
 })
 
 export const metadata: Metadata = {
-  title: "v0 App",
+  title: "DC Assist",
   description: "Created with v0",
   generator: "v0.app",
   icons: {
