@@ -6,7 +6,7 @@ import { toast } from "sonner"
 import { GroupCard } from "./group-card"
 import { GroupDetailsDialog } from "./group-details-dialog"
 import { SelectAssistantDialog } from "./select-assistant-dialog"
-import { CreateCourseDialog } from "./create-course-dialog"
+import { CreateCourseDialog, EditBookingTarget } from "./create-course-dialog"
 import { CollapsibleSection } from "./collapsible-section"
 import { TeacherOffer, TeacherBooking, CreateCourseData } from "../types"
 import { toDisplayDiscipline } from "@/lib/disciplines"
@@ -22,6 +22,7 @@ export function MyGroupsSection() {
   const [selectAssistantOffer, setSelectAssistantOffer] = useState<TeacherOffer | null>(null)
   const [isCreateCourseOpen, setIsCreateCourseOpen] = useState(false)
   const [editingOffer, setEditingOffer] = useState<TeacherOffer | null>(null)
+  const [editingBooking, setEditingBooking] = useState<EditBookingTarget | null>(null)
 
   const fetchGroups = async () => {
     try {
@@ -135,6 +136,41 @@ export function MyGroupsSection() {
     }
   }
 
+  const handleUpdateBookingCard = async (data: CreateCourseData) => {
+    if (!editingBooking) return
+    try {
+      const token = localStorage.getItem("token")
+      const response = await fetch(
+        `${BACKEND_URL}/api/teacher/bookings/${editingBooking.booking.booking_id}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            numGroups: data.numberOfGroups,
+            disciplineId: data.disciplineId,
+            facultyName: data.faculty,
+            programName: data.program,
+            moduleIds: data.moduleIds,
+            links: data.links,
+          }),
+        }
+      )
+      if (!response.ok) {
+        const body = await response.json().catch(() => null)
+        throw new Error(body?.error ?? "Не удалось сохранить изменения")
+      }
+      await fetchGroups()
+      toast.success("Изменения сохранены.")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Не удалось сохранить изменения.")
+    } finally {
+      setEditingBooking(null)
+    }
+  }
+
   // Offers with open slots → assignable, regardless of how many assistants
   // are already assigned (fixes: available slots used to vanish from this
   // list as soon as the offer got its first assistant)
@@ -179,6 +215,13 @@ export function MyGroupsSection() {
         onClose={() => setEditingOffer(null)}
         onSubmit={handleUpdateCourse}
         editOffer={editingOffer}
+      />
+
+      <CreateCourseDialog
+        isOpen={editingBooking !== null}
+        onClose={() => setEditingBooking(null)}
+        onSubmit={handleUpdateBookingCard}
+        editBooking={editingBooking}
       />
 
       <div className="flex justify-end">
@@ -253,6 +296,18 @@ export function MyGroupsSection() {
                     paymentType={booking.payment_type}
                     bookingStatus={booking.status}
                     onMoreDetails={() => setSelectedItem({ offer, booking })}
+                    onEdit={() => setEditingBooking({
+                      offer,
+                      booking,
+                      // capacity left for this assistant: request total minus the others
+                      maxGroups: Math.min(
+                        4,
+                        offer.total_groups -
+                          offer.bookings
+                            .filter((b) => b.booking_id !== booking.booking_id)
+                            .reduce((sum, b) => sum + (b.num_groups ?? 1), 0)
+                      ),
+                    })}
                     onAccept={() => handleAccept(booking.booking_id)}
                     onDelete={() => handleDelete(booking.booking_id)}
                   />

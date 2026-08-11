@@ -186,7 +186,7 @@ function NoAssistantCard({ discipline, faculty, program, modules, groupsCount, a
 function MyGroupCard({
   discipline, faculty, program, modules, groupsCount,
   studentFirstName, studentLastName, studentEmail, studentTelegram,
-  paymentType, bookingStatus, onMoreDetails, onAccept, onDelete,
+  paymentType, bookingStatus, onMoreDetails, onEdit, onAccept, onDelete,
 }: GroupCardProps) {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const isMoney = paymentType === "money"
@@ -222,6 +222,15 @@ function MyGroupCard({
                   </span>
                 </div>
               )}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-gray-400 hover:text-[#2300fa] hover:bg-gray-100"
+                title="Редактировать карточку"
+                onClick={onEdit}
+              >
+                <Edit className="h-3.5 w-3.5" />
+              </Button>
               <Button variant="ghost" size="icon" className="h-7 w-7 text-[#ff1ef7] hover:text-[#ff1ef7] hover:bg-red-50" onClick={() => setConfirmOpen(true)}>
                 <Trash2 className="h-3.5 w-3.5" />
               </Button>

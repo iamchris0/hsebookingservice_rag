@@ -4,9 +4,16 @@ import React, { useState, useEffect, useRef } from "react"
 import { X, Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { CreateCourseData, DisciplineOption, FacultyOption, LinkRow, ModuleOption, ProgramOption, TeacherOffer } from "../types"
+import { CreateCourseData, DisciplineOption, FacultyOption, LinkRow, ModuleOption, ProgramOption, TeacherBooking, TeacherOffer } from "../types"
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001"
+
+export interface EditBookingTarget {
+  offer: TeacherOffer
+  booking: TeacherBooking
+  /** Largest group count this assistant may take (request capacity minus the others). */
+  maxGroups: number
+}
 
 interface CreateCourseDialogProps {
   isOpen: boolean
@@ -14,9 +21,14 @@ interface CreateCourseDialogProps {
   onSubmit: (data: CreateCourseData) => void
   /** When set, the dialog edits this offer instead of creating a new one. */
   editOffer?: TeacherOffer | null
+  /**
+   * When set, the dialog edits one assistant's card: the request fields plus
+   * that assistant's own group count. The assistant itself can't be changed.
+   */
+  editBooking?: EditBookingTarget | null
 }
 
-export function CreateCourseDialog({ isOpen, onClose, onSubmit, editOffer }: CreateCourseDialogProps) {
+export function CreateCourseDialog({ isOpen, onClose, onSubmit, editOffer, editBooking }: CreateCourseDialogProps) {
   const [isVisible, setIsVisible] = useState(false)
   const [isAnimating, setIsAnimating] = useState(false)
 
@@ -59,19 +71,21 @@ export function CreateCourseDialog({ isOpen, onClose, onSubmit, editOffer }: Cre
     }).catch(() => {})
   }, [])
 
-  // Prefill from the offer being edited. Depends on `modules` because the
+  // Prefill from whatever is being edited. Depends on `modules` because the
   // offer carries module numbers, which only map to ids once they're loaded.
   useEffect(() => {
-    if (!isOpen || !editOffer) return
-    setSelectedDisciplineId(editOffer.discipline_id)
-    setFacultyValue(editOffer.faculty ?? "")
-    setProgramValue(editOffer.program ?? "")
-    setNumberOfGroups(String(editOffer.total_groups))
-    setLinks(editOffer.links ?? [])
+    const source = editOffer ?? editBooking?.offer
+    if (!isOpen || !source) return
+    setSelectedDisciplineId(source.discipline_id)
+    setFacultyValue(source.faculty ?? "")
+    setProgramValue(source.program ?? "")
+    // In booking mode the group count belongs to that assistant, not the request
+    setNumberOfGroups(String(editBooking ? editBooking.booking.num_groups : source.total_groups))
+    setLinks(source.links ?? [])
     setSelectedModuleIds(
-      modules.filter((m) => (editOffer.modules ?? []).includes(m.number)).map((m) => m.id)
+      modules.filter((m) => (source.modules ?? []).includes(m.number)).map((m) => m.id)
     )
-  }, [isOpen, editOffer, modules])
+  }, [isOpen, editOffer, editBooking, modules])
 
   useEffect(() => {
     if (isOpen) {
@@ -178,7 +192,9 @@ export function CreateCourseDialog({ isOpen, onClose, onSubmit, editOffer }: Cre
     !facultyValue.trim() ||
     !programValue.trim() ||
     !numberOfGroups ||
-    selectedModuleIds.length === 0
+    selectedModuleIds.length === 0 ||
+    (editBooking != null &&
+      (Number(numberOfGroups) < 1 || Number(numberOfGroups) > editBooking.maxGroups))
 
   if (!isVisible) return null
 
@@ -198,7 +214,11 @@ export function CreateCourseDialog({ isOpen, onClose, onSubmit, editOffer }: Cre
         <div className="px-4 pt-3 pb-2">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-[#2300fa]">
-              {editOffer ? "Редактировать заявку" : "Новая заявка"}
+              {editBooking
+                ? `Редактировать карточку: ${editBooking.booking.student_last_name} ${editBooking.booking.student_first_name}`
+                : editOffer
+                ? "Редактировать заявку"
+                : "Новая заявка"}
             </h2>
             <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-full transition-colors">
               <X className="w-5 h-5 text-[#2300fa]" />
@@ -298,15 +318,28 @@ export function CreateCourseDialog({ isOpen, onClose, onSubmit, editOffer }: Cre
 
           {/* 4. Number of Groups */}
           <div className="mb-3">
-            <label className="block font-bold text-[#2300fa] text-sm mb-1.5">Количество групп</label>
+            <label className="block font-bold text-[#2300fa] text-sm mb-1.5">
+              {editBooking ? "Количество групп у ассистента" : "Количество групп"}
+              {editBooking && (
+                <span className="text-gray-400 font-normal ml-1">
+                  (макс. {editBooking.maxGroups})
+                </span>
+              )}
+            </label>
             <Input
               type="number"
               min="1"
+              max={editBooking ? editBooking.maxGroups : undefined}
               placeholder="Введите количество групп"
               value={numberOfGroups}
               onChange={(e) => setNumberOfGroups(e.target.value.replace(/\D/g, ""))}
               className="bg-gray-100 border-none rounded-lg h-9 text-sm w-32"
             />
+            {editBooking && Number(numberOfGroups) > editBooking.maxGroups && (
+              <p className="text-xs text-red-500 mt-1">
+                Доступно не более {editBooking.maxGroups} групп(ы)
+              </p>
+            )}
           </div>
 
           {/* 5. Course Duration (Modules) */}
@@ -385,7 +418,7 @@ export function CreateCourseDialog({ isOpen, onClose, onSubmit, editOffer }: Cre
             disabled={isConfirmDisabled}
             className="w-full h-10 rounded-full bg-[#DCFF05] hover:bg-[#c9eb00] text-black font-medium border-2 border-black disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {editOffer ? "Сохранить" : "Подтвердить"}
+            {editOffer || editBooking ? "Сохранить" : "Подтвердить"}
           </Button>
         </div>
       </div>

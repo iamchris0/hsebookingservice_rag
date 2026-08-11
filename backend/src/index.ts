@@ -975,6 +975,148 @@ app.put<{
   }
 );
 
+// PUT /api/teacher/bookings/:bookingId — edit one assistant's card: their own
+// group count plus the parent request's fields. The assistant can't be changed.
+app.put<{
+  Params: { bookingId: string };
+  Body: {
+    numGroups: number;
+    disciplineId: number;
+    facultyName: string;
+    programName: string;
+    moduleIds: number[];
+    links: { name: string; url: string }[];
+  };
+}>(
+  "/api/teacher/bookings/:bookingId",
+  { preHandler: [app.authenticate] },
+  async (request, reply) => {
+    const user = request.user as { id: number; role: string };
+    if (user.role !== "teacher") {
+      return reply.code(403).send({ error: "Forbidden" });
+    }
+
+    const bookingId = parseInt(request.params.bookingId, 10);
+    if (isNaN(bookingId)) {
+      return reply.code(400).send({ error: "Некорректный id" });
+    }
+
+    const { numGroups, disciplineId, facultyName, programName, moduleIds, links } = request.body;
+
+    if (!numGroups || !disciplineId || !facultyName?.trim() || !programName?.trim() || !moduleIds?.length) {
+      return reply.code(400).send({ error: "Некорректные данные запроса" });
+    }
+
+    const groups = Number(numGroups);
+    if (groups < 1 || groups > 4) {
+      return reply.code(400).send({ error: "Количество групп должно быть от 1 до 4" });
+    }
+
+    const client = await app.pg.connect();
+    try {
+      // Booking must belong to an open offer owned by this teacher
+      const existing = await client.query(
+        `SELECT b.id, co.id AS offer_id, co.total_groups,
+           COALESCE((
+             SELECT SUM(COALESCE(b2.num_groups, 1)) FROM dc_new.bookings b2
+             WHERE b2.offer_id = co.id
+               AND b2.id <> b.id
+               AND b2.status IN ('active', 'pending')
+           ), 0) AS other_groups
+         FROM dc_new.bookings b
+         JOIN dc_new.course_offers co ON co.id = b.offer_id
+         WHERE b.id = $1 AND co.teacher_id = $2 AND co.status = 'open'`,
+        [bookingId, user.id]
+      );
+
+      if (existing.rows.length === 0) {
+        return reply.code(404).send({ error: "Запись не найдена" });
+      }
+
+      const { offer_id: offerId, total_groups: totalGroups, other_groups: otherGroups } = existing.rows[0];
+      const available = Number(totalGroups) - Number(otherGroups);
+
+      if (groups > available) {
+        return reply.code(409).send({ error: `Доступно только ${available} групп(ы)` });
+      }
+
+      await client.query("BEGIN");
+
+      // Upsert faculty
+      const facultyResult = await client.query(
+        `INSERT INTO dc_new.faculties (name)
+         VALUES ($1)
+         ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+         RETURNING id`,
+        [facultyName.trim()]
+      );
+      const facultyId = facultyResult.rows[0].id;
+
+      // Upsert program (unique per faculty)
+      const programResult = await client.query(
+        `INSERT INTO dc_new.programs (faculty_id, name)
+         VALUES ($1, $2)
+         ON CONFLICT (faculty_id, name) DO UPDATE SET name = EXCLUDED.name
+         RETURNING id`,
+        [facultyId, programName.trim()]
+      );
+      const programId = programResult.rows[0].id;
+
+      // Overwrite the parent request (total_groups stays as-is here)
+      await client.query(
+        `UPDATE dc_new.course_offers
+         SET discipline_id = $1, program_id = $2, updated_at = now()
+         WHERE id = $3`,
+        [disciplineId, programId, offerId]
+      );
+
+      // Replace modules
+      await client.query(
+        `DELETE FROM dc_new.course_offer_modules WHERE offer_id = $1`,
+        [offerId]
+      );
+      for (const moduleId of moduleIds) {
+        await client.query(
+          `INSERT INTO dc_new.course_offer_modules (offer_id, module_id) VALUES ($1, $2)`,
+          [offerId, moduleId]
+        );
+      }
+
+      // Replace links
+      await client.query(
+        `DELETE FROM dc_new.course_offer_links WHERE offer_id = $1`,
+        [offerId]
+      );
+      if (links && links.length > 0) {
+        for (let i = 0; i < links.length; i++) {
+          const link = links[i];
+          if (link && link.name && link.url) {
+            await client.query(
+              `INSERT INTO dc_new.course_offer_links (offer_id, name, url, sort_order)
+               VALUES ($1, $2, $3, $4)`,
+              [offerId, link.name, link.url, i]
+            );
+          }
+        }
+      }
+
+      // This assistant's own group count
+      await client.query(
+        `UPDATE dc_new.bookings SET num_groups = $1 WHERE id = $2`,
+        [groups, bookingId]
+      );
+
+      await client.query("COMMIT");
+      return { bookingId };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+);
+
 // GET /api/teacher/groups — open offers for the current teacher with bookings
 app.get(
   "/api/teacher/groups",
