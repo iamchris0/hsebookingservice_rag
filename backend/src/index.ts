@@ -787,8 +787,17 @@ app.post<{
       return reply.code(400).send({ error: "Некорректные данные запроса" });
     }
 
+    if (Number(totalGroups) < 1) {
+      return reply.code(400).send({ error: "Количество групп должно быть больше нуля" });
+    }
+
+    // Duplicates would violate the (offer_id, module_id) primary key
+    const uniqueModuleIds = [...new Set(moduleIds)];
+
     const client = await app.pg.connect();
     try {
+      await client.query("BEGIN");
+
       // Upsert faculty
       const facultyResult = await client.query(
         `INSERT INTO dc_new.faculties (name)
@@ -819,7 +828,7 @@ app.post<{
 
       const offerId = result.rows[0].id;
 
-      for (const moduleId of moduleIds) {
+      for (const moduleId of uniqueModuleIds) {
         await client.query(
           `INSERT INTO dc_new.course_offer_modules (offer_id, module_id) VALUES ($1, $2)`,
           [offerId, moduleId]
@@ -839,7 +848,11 @@ app.post<{
         }
       }
 
+      await client.query("COMMIT");
       return reply.code(201).send({ id: offerId });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
     } finally {
       client.release();
     }
@@ -877,6 +890,13 @@ app.put<{
     if (!disciplineId || !facultyName?.trim() || !programName?.trim() || !totalGroups || !moduleIds?.length) {
       return reply.code(400).send({ error: "Некорректные данные запроса" });
     }
+
+    if (Number(totalGroups) < 1) {
+      return reply.code(400).send({ error: "Количество групп должно быть больше нуля" });
+    }
+
+    // Duplicates would violate the (offer_id, module_id) primary key
+    const uniqueModuleIds = [...new Set(moduleIds)];
 
     const client = await app.pg.connect();
     try {
@@ -939,7 +959,7 @@ app.put<{
         `DELETE FROM dc_new.course_offer_modules WHERE offer_id = $1`,
         [offerId]
       );
-      for (const moduleId of moduleIds) {
+      for (const moduleId of uniqueModuleIds) {
         await client.query(
           `INSERT INTO dc_new.course_offer_modules (offer_id, module_id) VALUES ($1, $2)`,
           [offerId, moduleId]
@@ -1012,6 +1032,9 @@ app.put<{
       return reply.code(400).send({ error: "Некорректный формат оплаты" });
     }
 
+    // Duplicates would violate the (offer_id, module_id) primary key
+    const uniqueModuleIds = [...new Set(moduleIds)];
+
     const groups = Number(numGroups);
     if (groups < 1 || groups > 4) {
       return reply.code(400).send({ error: "Количество групп должно быть от 1 до 4" });
@@ -1080,7 +1103,7 @@ app.put<{
         `DELETE FROM dc_new.course_offer_modules WHERE offer_id = $1`,
         [offerId]
       );
-      for (const moduleId of moduleIds) {
+      for (const moduleId of uniqueModuleIds) {
         await client.query(
           `INSERT INTO dc_new.course_offer_modules (offer_id, module_id) VALUES ($1, $2)`,
           [offerId, moduleId]
@@ -1217,6 +1240,7 @@ app.patch<{ Params: { bookingId: string } }>(
          WHERE b.id = $1
            AND b.offer_id = co.id
            AND co.teacher_id = $2
+           AND co.status = 'open'
            AND b.status = 'pending'
          RETURNING b.id`,
         [bookingId, user.id]
@@ -1255,6 +1279,7 @@ app.delete<{ Params: { bookingId: string } }>(
          WHERE b.id = $1
            AND b.offer_id = co.id
            AND co.teacher_id = $2
+           AND b.status <> 'cancelled'
          RETURNING b.id`,
         [bookingId, user.id]
       );
@@ -1466,21 +1491,50 @@ app.post<{
         return reply.code(409).send({ error: `Доступно только ${available} групп(ы)` });
       }
 
+      // The student must really be a student
+      const studentCheck = await client.query(
+        `SELECT id FROM dc_new.users WHERE id = $1 AND role = 'student'`,
+        [studentId]
+      );
+      if (studentCheck.rows.length === 0) {
+        return reply.code(404).send({ error: "Студент не найден" });
+      }
+
+      // A previously cancelled booking still occupies the (offer_id, student_id)
+      // unique slot, so re-assigning someone who was removed has to revive that
+      // row rather than insert a new one.
       const insertResult = await client.query(
         `INSERT INTO dc_new.bookings
-           (offer_id, student_id, payment_type, num_groups, status, created_by_teacher_id)
-         VALUES ($1, $2, $3, $4, 'active', $5)
+           (offer_id, student_id, payment_type, num_groups, status, created_by_teacher_id, created_at)
+         VALUES ($1, $2, $3, $4, 'active', $5, now())
+         ON CONFLICT (offer_id, student_id) DO UPDATE
+           SET status                = 'active',
+               payment_type          = EXCLUDED.payment_type,
+               num_groups            = EXCLUDED.num_groups,
+               created_by_teacher_id = EXCLUDED.created_by_teacher_id,
+               cancelled_at          = NULL,
+               cancelled_by_user_id  = NULL,
+               created_at            = now()
+           WHERE dc_new.bookings.status = 'cancelled'
          RETURNING id`,
         [offerId, studentId, paymentType, groups, user.id]
       );
 
-      return reply.code(201).send({ bookingId: insertResult.rows[0].id });
-    } catch (error: unknown) {
-      const pgError = error as { code?: string };
-      if (pgError.code === "23505") {
-        return reply.code(409).send({ error: "Студент уже назначен на это предложение" });
+      if (insertResult.rows.length === 0) {
+        // Conflict with a row that is not cancelled — say which case it is
+        const current = await client.query(
+          `SELECT status FROM dc_new.bookings WHERE offer_id = $1 AND student_id = $2`,
+          [offerId, studentId]
+        );
+        const status = current.rows[0]?.status;
+        return reply.code(409).send({
+          error: status === "pending"
+            ? "Студент уже подал заявку на этот курс — подтвердите её"
+            : "Студент уже назначен на это предложение",
+        });
       }
-      throw error;
+
+      return reply.code(201).send({ bookingId: insertResult.rows[0].id });
     } finally {
       client.release();
     }
