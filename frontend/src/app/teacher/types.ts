@@ -119,6 +119,8 @@ export interface CreateCourseData {
   duration: number[]      // selected module numbers
   moduleIds: number[]     // selected module IDs
   links: LinkRow[]
+  /** Only set when editing an assistant's card. */
+  paymentType?: "money" | "credits"
 }
 
 // Full student profile (GET /api/teacher/students/:id)

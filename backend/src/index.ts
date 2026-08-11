@@ -981,6 +981,7 @@ app.put<{
   Params: { bookingId: string };
   Body: {
     numGroups: number;
+    paymentType?: "money" | "credits";
     disciplineId: number;
     facultyName: string;
     programName: string;
@@ -1001,10 +1002,14 @@ app.put<{
       return reply.code(400).send({ error: "Некорректный id" });
     }
 
-    const { numGroups, disciplineId, facultyName, programName, moduleIds, links } = request.body;
+    const { numGroups, paymentType, disciplineId, facultyName, programName, moduleIds, links } = request.body;
 
     if (!numGroups || !disciplineId || !facultyName?.trim() || !programName?.trim() || !moduleIds?.length) {
       return reply.code(400).send({ error: "Некорректные данные запроса" });
+    }
+
+    if (paymentType && !["money", "credits"].includes(paymentType)) {
+      return reply.code(400).send({ error: "Некорректный формат оплаты" });
     }
 
     const groups = Number(numGroups);
@@ -1100,10 +1105,13 @@ app.put<{
         }
       }
 
-      // This assistant's own group count
+      // This assistant's own group count and payment format
       await client.query(
-        `UPDATE dc_new.bookings SET num_groups = $1 WHERE id = $2`,
-        [groups, bookingId]
+        `UPDATE dc_new.bookings
+         SET num_groups = $1,
+             payment_type = COALESCE($2::dc_new.payment_type, payment_type)
+         WHERE id = $3`,
+        [groups, paymentType ?? null, bookingId]
       );
 
       await client.query("COMMIT");
@@ -1402,7 +1410,12 @@ app.get<{ Params: { id: string } }>(
 
 // POST /api/teacher/assign — teacher assigns a student assistant to their offer
 app.post<{
-  Body: { offerId: number; studentId: number; numGroups: number };
+  Body: {
+    offerId: number;
+    studentId: number;
+    numGroups: number;
+    paymentType?: "money" | "credits";
+  };
 }>(
   "/api/teacher/assign",
   { preHandler: [app.authenticate] },
@@ -1412,10 +1425,14 @@ app.post<{
       return reply.code(403).send({ error: "Forbidden" });
     }
 
-    const { offerId, studentId, numGroups } = request.body;
+    const { offerId, studentId, numGroups, paymentType = "money" } = request.body;
 
     if (!offerId || !studentId || !numGroups) {
       return reply.code(400).send({ error: "Некорректные данные запроса" });
+    }
+
+    if (!["money", "credits"].includes(paymentType)) {
+      return reply.code(400).send({ error: "Некорректный формат оплаты" });
     }
 
     const groups = Number(numGroups);
@@ -1452,9 +1469,9 @@ app.post<{
       const insertResult = await client.query(
         `INSERT INTO dc_new.bookings
            (offer_id, student_id, payment_type, num_groups, status, created_by_teacher_id)
-         VALUES ($1, $2, 'money', $3, 'active', $4)
+         VALUES ($1, $2, $3, $4, 'active', $5)
          RETURNING id`,
-        [offerId, studentId, groups, user.id]
+        [offerId, studentId, paymentType, groups, user.id]
       );
 
       return reply.code(201).send({ bookingId: insertResult.rows[0].id });

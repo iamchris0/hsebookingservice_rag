@@ -37,6 +37,7 @@ export function CreateCourseDialog({ isOpen, onClose, onSubmit, editOffer, editB
   const [facultyValue, setFacultyValue] = useState("")
   const [programValue, setProgramValue] = useState("")
   const [numberOfGroups, setNumberOfGroups] = useState("")
+  const [paymentType, setPaymentType] = useState<"money" | "credits">("money")
   const [selectedModuleIds, setSelectedModuleIds] = useState<number[]>([])
   const [links, setLinks] = useState<LinkRow[]>([])
 
@@ -81,6 +82,7 @@ export function CreateCourseDialog({ isOpen, onClose, onSubmit, editOffer, editB
     setProgramValue(source.program ?? "")
     // In booking mode the group count belongs to that assistant, not the request
     setNumberOfGroups(String(editBooking ? editBooking.booking.num_groups : source.total_groups))
+    if (editBooking) setPaymentType(editBooking.booking.payment_type)
     setLinks(source.links ?? [])
     setSelectedModuleIds(
       modules.filter((m) => (source.modules ?? []).includes(m.number)).map((m) => m.id)
@@ -100,6 +102,7 @@ export function CreateCourseDialog({ isOpen, onClose, onSubmit, editOffer, editB
         setFacultyValue("")
         setProgramValue("")
         setNumberOfGroups("")
+        setPaymentType("money")
         setSelectedModuleIds([])
         setLinks([])
         setIsFacultyDropdownOpen(false)
@@ -183,6 +186,7 @@ export function CreateCourseDialog({ isOpen, onClose, onSubmit, editOffer, editB
       duration: selectedModuleNumbers,
       moduleIds: selectedModuleIds,
       links,
+      ...(editBooking ? { paymentType } : {}),
     })
     onClose()
   }
@@ -341,6 +345,31 @@ export function CreateCourseDialog({ isOpen, onClose, onSubmit, editOffer, editB
               </p>
             )}
           </div>
+
+          {/* Payment format — only when editing an assistant's card */}
+          {editBooking && (
+            <div className="mb-3">
+              <label className="block font-bold text-[#2300fa] text-sm mb-1.5">Формат оплаты</label>
+              <div className="flex gap-2">
+                {([
+                  { value: "money", label: "Оплата" },
+                  { value: "credits", label: "Кредиты" },
+                ] as const).map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => setPaymentType(option.value)}
+                    className={`flex-1 py-2 px-4 text-center text-sm font-medium rounded-md border transition-colors ${
+                      paymentType === option.value
+                        ? "bg-[#2300fa] text-white border-[#2300fa]"
+                        : "bg-white text-black border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* 5. Course Duration (Modules) */}
           <div className="mb-3">

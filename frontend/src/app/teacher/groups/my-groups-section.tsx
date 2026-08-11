@@ -152,6 +152,7 @@ export function MyGroupsSection() {
           },
           body: JSON.stringify({
             numGroups: data.numberOfGroups,
+            paymentType: data.paymentType,
             disciplineId: data.disciplineId,
             facultyName: data.faculty,
             programName: data.program,
