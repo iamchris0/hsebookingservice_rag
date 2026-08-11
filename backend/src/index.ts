@@ -1159,6 +1159,7 @@ app.get(
                'status',             b.status,
                'payment_type',       b.payment_type,
                'num_groups',         b.num_groups,
+               'student_id',         b.student_id,
                'student_first_name', s.first_name,
                'student_last_name',  s.last_name,
                'student_email',      s.email,

@@ -7,6 +7,7 @@ import { GroupCard } from "./group-card"
 import { GroupDetailsDialog } from "./group-details-dialog"
 import { SelectAssistantDialog } from "./select-assistant-dialog"
 import { CreateCourseDialog, EditBookingTarget } from "./create-course-dialog"
+import { StudentDetailsDialog } from "../components/student-details-dialog"
 import { CollapsibleSection } from "./collapsible-section"
 import { TeacherOffer, TeacherBooking, CreateCourseData } from "../types"
 import { toDisplayDiscipline } from "@/lib/disciplines"
@@ -23,6 +24,7 @@ export function MyGroupsSection() {
   const [isCreateCourseOpen, setIsCreateCourseOpen] = useState(false)
   const [editingOffer, setEditingOffer] = useState<TeacherOffer | null>(null)
   const [editingBooking, setEditingBooking] = useState<EditBookingTarget | null>(null)
+  const [aboutStudentId, setAboutStudentId] = useState<string | null>(null)
 
   const fetchGroups = async () => {
     try {
@@ -224,6 +226,12 @@ export function MyGroupsSection() {
         editBooking={editingBooking}
       />
 
+      <StudentDetailsDialog
+        isOpen={aboutStudentId !== null}
+        onClose={() => setAboutStudentId(null)}
+        studentId={aboutStudentId}
+      />
+
       <div className="flex justify-end">
         <button
           onClick={() => setIsCreateCourseOpen(true)}
@@ -296,6 +304,7 @@ export function MyGroupsSection() {
                     paymentType={booking.payment_type}
                     bookingStatus={booking.status}
                     onMoreDetails={() => setSelectedItem({ offer, booking })}
+                    onAboutAssistant={() => setAboutStudentId(String(booking.student_id))}
                     onEdit={() => setEditingBooking({
                       offer,
                       booking,

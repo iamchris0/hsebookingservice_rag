@@ -84,6 +84,7 @@ interface GroupCardProps {
   bookingStatus?: "pending" | "active"
   hideAssistantName?: boolean
   onMoreDetails?: () => void
+  onAboutAssistant?: () => void
   onSelectAssistant?: () => void
   onEdit?: () => void
   onAccept?: () => void
@@ -186,7 +187,7 @@ function NoAssistantCard({ discipline, faculty, program, modules, groupsCount, a
 function MyGroupCard({
   discipline, faculty, program, modules, groupsCount,
   studentFirstName, studentLastName, studentEmail, studentTelegram,
-  paymentType, bookingStatus, onMoreDetails, onEdit, onAccept, onDelete,
+  paymentType, bookingStatus, onMoreDetails, onAboutAssistant, onEdit, onAccept, onDelete,
 }: GroupCardProps) {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const isMoney = paymentType === "money"
@@ -278,7 +279,7 @@ function MyGroupCard({
               <Button
                 variant="outline"
                 className="w-full h-9 text-sm font-medium bg-transparent border-2 border-gray-400 text-black hover:bg-gray-100 rounded-full transition-colors"
-                onClick={onMoreDetails}
+                onClick={onAboutAssistant}
               >
                 Об ассистенте
               </Button>

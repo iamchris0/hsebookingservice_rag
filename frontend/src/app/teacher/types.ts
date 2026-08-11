@@ -62,6 +62,7 @@ export interface TeacherBooking {
   status: "pending" | "active"
   payment_type: "money" | "credits"
   num_groups: number
+  student_id: number
   student_first_name: string
   student_last_name: string
   student_email: string

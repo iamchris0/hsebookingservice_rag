@@ -5,7 +5,7 @@ import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Star, GraduationCap, BookOpen, Mail, Send } from "lucide-react"
 import { Assistant } from "../types"
-import { StudentDetailsDialog } from "./student-details-dialog"
+import { StudentDetailsDialog } from "../components/student-details-dialog"
 
 type AssistantCardProps = Assistant
 
