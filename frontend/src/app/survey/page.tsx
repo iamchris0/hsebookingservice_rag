@@ -8,14 +8,19 @@ import { getQuestionsForDiscipline, QuestionConfig } from './questions';
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
 
 // ─── Draft persistence ────────────────────────────────────────────────────────
-// Keyed by JWT signature so the draft disappears automatically when the token
-// expires and the user re-authenticates (new token = new signature = no draft).
 
 function getSurveyDraftKey(): string | null {
-  const token = localStorage.getItem('token');
-  if (!token) return null;
-  const sig = token.split('.')[2];
-  return sig ? `survey_draft_${sig}` : null;
+  // Keyed by account (email), not the token signature: a session that expires
+  // mid-survey gets a new signature on re-login, which would otherwise orphan
+  // the draft at the exact moment it's needed most.
+  const userStr = localStorage.getItem('user');
+  if (!userStr) return null;
+  try {
+    const email = (JSON.parse(userStr) as { email?: string }).email;
+    return email ? `survey_draft_${email}` : null;
+  } catch {
+    return null;
+  }
 }
 
 function saveSurveyDraft(state: object): void {
@@ -1186,6 +1191,7 @@ export default function SurveyPage() {
   const [s6Errors, setS6Errors] = useState<Partial<Record<keyof S6, string>>>({});
 
   const [saving, setSaving] = useState(false);
+  const [completeError, setCompleteError] = useState<string | null>(null);
 
   // Fetch disciplines
   useEffect(() => {
@@ -1286,11 +1292,36 @@ export default function SurveyPage() {
     }
 
     setSaving(true);
-    try {
-      const token = localStorage.getItem('token');
-      const h = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+    setCompleteError(null);
 
-      await fetch(`${BACKEND_URL}/api/student/profile`, {
+    // Every step must actually be confirmed saved before we tell the student
+    // they're done. Previously none of these calls checked their response, so
+    // a single failure (expired session, a transient 500, ...) still ended in
+    // "success": the local flag was set, the draft was wiped, and the student
+    // was sent onward — while the backend might not have saved anything and
+    // questionnaire_completed stayed false. The next login would then bounce
+    // them straight back to a blank survey, which looked like a lockout.
+    const token = localStorage.getItem('token');
+    const h = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+
+    const step = async (label: string, path: string, init: RequestInit) => {
+      let response: Response;
+      try {
+        response = await fetch(`${BACKEND_URL}${path}`, init);
+      } catch {
+        throw new Error(`Не удалось сохранить раздел «${label}»: нет соединения с сервером`);
+      }
+      if (response.status === 401) {
+        throw new Error('Сессия истекла. Войдите заново — введённые данные сохранены как черновик.');
+      }
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.error ?? `Не удалось сохранить раздел «${label}»`);
+      }
+    };
+
+    try {
+      await step('Информация о себе', '/api/student/profile', {
         method: 'PUT', headers: h,
         body: JSON.stringify({
           firstName: s1.firstName, lastName: s1.lastName, middleName: s1.middleName,
@@ -1299,7 +1330,7 @@ export default function SurveyPage() {
         }),
       });
 
-      await fetch(`${BACKEND_URL}/api/student/education`, {
+      await step('Образование', '/api/student/education', {
         method: 'PUT', headers: h,
         body: JSON.stringify({
           faculty: s2.faculty, program: s2.program,
@@ -1312,7 +1343,7 @@ export default function SurveyPage() {
         }),
       });
 
-      await fetch(`${BACKEND_URL}/api/student/priorities`, {
+      await step('Приоритетная дисциплина', '/api/student/priorities', {
         method: 'PUT', headers: h,
         body: JSON.stringify({
           disciplineId: parseInt(s3.disciplineId),
@@ -1323,7 +1354,7 @@ export default function SurveyPage() {
       });
 
       if (s4.disciplineId && s4.disciplineId !== 'skip') {
-        await fetch(`${BACKEND_URL}/api/student/priorities`, {
+        await step('Второй приоритет', '/api/student/priorities', {
           method: 'PUT', headers: h,
           body: JSON.stringify({
             disciplineId: parseInt(s4.disciplineId),
@@ -1335,13 +1366,13 @@ export default function SurveyPage() {
       }
 
       if (s6.hasRecommendation === 'yes') {
-        await fetch(`${BACKEND_URL}/api/student/recommendation`, {
+        await step('Рекомендации', '/api/student/recommendation', {
           method: 'PUT', headers: h,
           body: JSON.stringify({ teacherEmail: s6.teacherEmail }),
         });
       }
 
-      await fetch(`${BACKEND_URL}/api/student/motivation`, {
+      await step('Мотивация', '/api/student/motivation', {
         method: 'PUT', headers: h,
         body: JSON.stringify({
           motivation: s5.motivation,
@@ -1350,10 +1381,12 @@ export default function SurveyPage() {
         }),
       });
 
-      await fetch(`${BACKEND_URL}/api/student/survey/complete`, {
+      await step('Завершение анкеты', '/api/student/survey/complete', {
         method: 'POST', headers: { Authorization: `Bearer ${token}` },
       });
 
+      // Only now, with every section confirmed saved, is it safe to mark the
+      // survey done locally and let the draft go.
       const userStr = localStorage.getItem('user');
       if (userStr) {
         const user = JSON.parse(userStr);
@@ -1362,6 +1395,8 @@ export default function SurveyPage() {
 
       clearSurveyDraft();
       router.push('/student/my-groups');
+    } catch (err) {
+      setCompleteError(err instanceof Error ? err.message : 'Не удалось сохранить анкету');
     } finally {
       setSaving(false);
     }
@@ -1479,6 +1514,14 @@ export default function SurveyPage() {
               onNext={handleComplete}
               onBack={() => setStep(5)}
             />
+          )}
+          {completeError && (
+            <div style={{
+              marginTop: 20, padding: '14px 16px',
+              backgroundColor: '#fee', border: '1.5px solid #fcc', borderRadius: 10,
+            }}>
+              <p style={{ fontSize: 13, color: '#c00', lineHeight: 1.5 }}>{completeError}</p>
+            </div>
           )}
         </div>
       </div>

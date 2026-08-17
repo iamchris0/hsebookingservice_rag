@@ -561,14 +561,29 @@ app.put<{
 
     const { disciplineId, desiredGroupSize, answers, priority = 1 } = request.body;
 
+    if (!disciplineId) {
+      return reply.code(400).send({ error: "Не выбрана дисциплина" });
+    }
+
     const client = await app.pg.connect();
     try {
+      await client.query("BEGIN");
+
+      // student_preferences carries two independent UNIQUE constraints —
+      // (student_id, priority) and (student_id, discipline_id) — so a plain
+      // "ON CONFLICT (student_id, priority)" upsert can still throw an
+      // unhandled 23505 if this discipline was previously saved under the
+      // OTHER priority (e.g. swapping which slot a discipline occupies).
+      // Clearing both potential collisions first makes the write unconditional.
+      await client.query(
+        `DELETE FROM dc_new.student_preferences
+         WHERE student_id = $1 AND (priority = $2 OR discipline_id = $3)`,
+        [user.id, priority, disciplineId]
+      );
+
       await client.query(
         `INSERT INTO dc_new.student_preferences (student_id, discipline_id, priority, desired_group_size)
-         VALUES ($1, $2, $3, $4)
-         ON CONFLICT (student_id, priority) DO UPDATE
-           SET discipline_id = EXCLUDED.discipline_id,
-               desired_group_size = EXCLUDED.desired_group_size`,
+         VALUES ($1, $2, $3, $4)`,
         [user.id, disciplineId, priority, desiredGroupSize]
       );
 
@@ -586,7 +601,11 @@ app.put<{
         [JSON.stringify(all), user.id]
       );
 
+      await client.query("COMMIT");
       return { success: true };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
     } finally {
       client.release();
     }
