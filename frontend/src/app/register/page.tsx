@@ -133,12 +133,12 @@ export default function Register() {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Email */}
+          {/* Login */}
           <input
-            type="email"
+            type="text"
             value={email}
             onChange={(e) => { setEmail(e.target.value); setError(''); }}
-            placeholder="Email"
+            placeholder="Login"
             className="w-full px-5 py-4 text-base outline-none transition-all"
             style={inputStyle}
             onFocus={focusStyle}

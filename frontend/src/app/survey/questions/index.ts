@@ -10,7 +10,7 @@ const DISCIPLINE_QUESTIONS: Record<string, QuestionConfig[]> = {
   'Анализ данных': dataAnalysisQuestions,
   'Программирование на Python': pythonQuestions,
   'Машинное обучение': mlQuestions,
-  'Цифровая грамотность': digitalLiteracyQuestions,
+  'Цифровая грамотность и ИИ': digitalLiteracyQuestions,
 };
 
 export function getQuestionsForDiscipline(disciplineName: string): QuestionConfig[] {

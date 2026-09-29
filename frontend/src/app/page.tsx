@@ -103,7 +103,7 @@ export default function Login() {
           {/* Login Input */}
           <div>
             <input
-              type="email"
+              type="text"
               value={email}
               onChange={(e) => {
                 setEmail(e.target.value);
