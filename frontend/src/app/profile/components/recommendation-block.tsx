@@ -73,16 +73,14 @@ export function RecommendationBlock({ profile, onSaved }: RecommendationBlockPro
       {error && <p className="text-sm text-red-500 mt-3">{error}</p>}
 
       {isDirty && (
-        <div className="mt-4 flex justify-end">
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            className="rounded-full bg-[#DCFF05] hover:bg-[#c9eb00] text-black font-medium border-2 border-black px-6 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {saving ? "Сохранение..." : "Изменить"}
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving}
+          className="mt-4 w-full rounded-full bg-[#DCFF05] hover:bg-[#c9eb00] text-black font-medium border-2 border-black px-6 py-2.5 text-sm disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {saving ? "Сохранение..." : "Изменить"}
+        </button>
       )}
     </div>
   )

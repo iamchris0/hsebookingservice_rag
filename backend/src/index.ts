@@ -798,6 +798,54 @@ app.put<{
   }
 );
 
+// DELETE /api/student/priorities/:priority — unset a priority slot (e.g. "not considering 2nd priority")
+app.delete<{ Params: { priority: string } }>(
+  "/api/student/priorities/:priority",
+  { preHandler: [app.authenticate] },
+  async (request, reply) => {
+    const user = request.user as { id: number; role: string };
+    if (user.role !== "student") {
+      return reply.code(403).send({ error: "Forbidden" });
+    }
+
+    const priority = parseInt(request.params.priority, 10);
+    if (isNaN(priority)) {
+      return reply.code(400).send({ error: "Некорректный приоритет" });
+    }
+
+    const client = await app.pg.connect();
+    try {
+      await client.query("BEGIN");
+
+      await client.query(
+        `DELETE FROM dc_new.student_preferences WHERE student_id = $1 AND priority = $2`,
+        [user.id, priority]
+      );
+
+      const cur = await client.query(
+        `SELECT experience FROM dc_new.student_profiles WHERE user_id = $1`,
+        [user.id]
+      );
+      let all: Record<string, Record<string, string>> = {};
+      try { all = JSON.parse(cur.rows[0]?.experience ?? '{}'); } catch {}
+      delete all[String(priority)];
+
+      await client.query(
+        `UPDATE dc_new.student_profiles SET experience = $1 WHERE user_id = $2`,
+        [JSON.stringify(all), user.id]
+      );
+
+      await client.query("COMMIT");
+      return { success: true };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+);
+
 // PUT /api/student/recommendation — save section-6 teacher recommendation email
 app.put<{
   Body: { teacherEmail: string };

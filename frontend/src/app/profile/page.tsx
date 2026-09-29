@@ -94,7 +94,7 @@ export default function ProfilePage() {
 
       {profile.role === "student" && (
         <div className="space-y-4">
-          <h2 className="text-lg font-bold text-black pt-2">Анкета ассистента</h2>
+          <h2 className="text-lg font-bold text-black pt-2">Ответы опросной формы</h2>
 
           <CollapsibleBlock title="О себе" subtitle="Telegram, дата рождения, гражданство, телефон">
             <AboutBlock profile={profile} onSaved={refreshProfile} />
@@ -105,11 +105,22 @@ export default function ProfilePage() {
           </CollapsibleBlock>
 
           <CollapsibleBlock title="Приоритетная дисциплина" subtitle={priority1?.discipline ?? "Не выбрана"}>
-            <PriorityBlock priorityNumber={1} detail={priority1} disciplines={disciplines} onSaved={refreshProfile} />
+            <PriorityBlock
+              priorityNumber={1}
+              detail={priority1}
+              disciplines={disciplines}
+              onSaved={refreshProfile}
+            />
           </CollapsibleBlock>
 
-          <CollapsibleBlock title="Второй приоритет" subtitle={priority2?.discipline ?? "Не выбран"}>
-            <PriorityBlock priorityNumber={2} detail={priority2} disciplines={disciplines} onSaved={refreshProfile} />
+          <CollapsibleBlock title="Второй приоритет" subtitle={priority2?.discipline ?? "Не рассматриваю 2-й приоритет"}>
+            <PriorityBlock
+              priorityNumber={2}
+              detail={priority2}
+              disciplines={disciplines}
+              excludeDisciplineId={priority1?.disciplineId}
+              onSaved={refreshProfile}
+            />
           </CollapsibleBlock>
 
           <CollapsibleBlock title="Мотивация" subtitle="Почему вы хотите быть ассистентом">
