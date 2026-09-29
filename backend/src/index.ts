@@ -282,6 +282,192 @@ app.post(
   }
 );
 
+// ─── Account (self-service, both roles) ──────────────────────────────────────
+
+// GET /api/account/profile — the current user's own profile (role-aware)
+app.get(
+  "/api/account/profile",
+  { preHandler: [app.authenticate] },
+  async (request, reply) => {
+    const authUser = request.user as { id: number; role: string };
+
+    const client = await app.pg.connect();
+    try {
+      const userResult = await client.query(
+        `SELECT id, email, first_name, last_name, middle_name, role
+         FROM dc_new.users WHERE id = $1`,
+        [authUser.id]
+      );
+      if (userResult.rows.length === 0) {
+        return reply.code(404).send({ error: "Пользователь не найден" });
+      }
+      const u = userResult.rows[0];
+
+      const base = {
+        id: u.id,
+        email: u.email,
+        firstName: u.first_name,
+        lastName: u.last_name,
+        middleName: u.middle_name,
+        role: u.role,
+      };
+
+      if (u.role !== "student") {
+        return base;
+      }
+
+      const profileResult = await client.query(
+        `SELECT telegram, to_char(birthday, 'YYYY-MM-DD') AS birthday, citizenship, phone,
+                edu_faculty, edu_program, study_year, debts, edu_rating,
+                digital_literacy_score, python_score, data_analysis_score,
+                motivation_text, achievements, prior_courses, experience,
+                recommendation_available, recommendation_email, questionnaire_completed
+         FROM dc_new.student_profiles WHERE user_id = $1`,
+        [authUser.id]
+      );
+      const sp = profileResult.rows[0] ?? {};
+
+      let experience: Record<string, Record<string, string>> = {};
+      try { experience = JSON.parse(sp.experience ?? "{}"); } catch { /* malformed, ignore */ }
+
+      const preferencesResult = await client.query(
+        `SELECT spr.priority, spr.discipline_id, d.name AS discipline, spr.desired_group_size
+         FROM dc_new.student_preferences spr
+         JOIN dc_new.disciplines d ON d.id = spr.discipline_id
+         WHERE spr.student_id = $1
+         ORDER BY spr.priority`,
+        [authUser.id]
+      );
+
+      const priorities = preferencesResult.rows.map((p: {
+        priority: number;
+        discipline_id: number;
+        discipline: string;
+        desired_group_size: number;
+      }) => ({
+        priority: p.priority,
+        disciplineId: p.discipline_id,
+        discipline: p.discipline,
+        desiredGroupSize: p.desired_group_size,
+        answers: experience[String(p.priority)] ?? {},
+      }));
+
+      return {
+        ...base,
+        questionnaireCompleted: sp.questionnaire_completed ?? false,
+        telegram: sp.telegram ?? null,
+        birthday: sp.birthday ?? null,
+        citizenship: sp.citizenship ?? null,
+        phone: sp.phone ?? null,
+        eduFaculty: sp.edu_faculty ?? null,
+        eduProgram: sp.edu_program ?? null,
+        studyYear: sp.study_year ?? null,
+        debts: sp.debts ?? null,
+        eduRating: sp.edu_rating ?? null,
+        digitalLiteracyScore: sp.digital_literacy_score ?? null,
+        programmingScore: sp.python_score ?? null,
+        dataAnalysisScore: sp.data_analysis_score ?? null,
+        motivation: sp.motivation_text ?? null,
+        achievements: sp.achievements ?? null,
+        priorCourses: sp.prior_courses ?? null,
+        recommendationAvailable: sp.recommendation_available ?? false,
+        recommendationEmail: sp.recommendation_email ?? null,
+        priorities,
+      };
+    } finally {
+      client.release();
+    }
+  }
+);
+
+// PUT /api/account/credentials — update name, login (email) and/or password (both roles)
+app.put<{
+  Body: {
+    firstName: string;
+    lastName: string;
+    middleName?: string;
+    email: string;
+    newPassword?: string;
+  };
+}>(
+  "/api/account/credentials",
+  { preHandler: [app.authenticate] },
+  async (request, reply) => {
+    const authUser = request.user as { id: number; email: string; role: "student" | "teacher" };
+    const { firstName, lastName, middleName, email, newPassword } = request.body;
+
+    if (!firstName?.trim() || !lastName?.trim() || !email?.trim()) {
+      return reply.code(400).send({ error: "Имя, фамилия и логин обязательны" });
+    }
+    if (newPassword && newPassword.length < 6) {
+      return reply.code(400).send({ error: "Новый пароль должен быть не короче 6 символов" });
+    }
+
+    const client = await app.pg.connect();
+    try {
+      const current = await client.query(
+        `SELECT id FROM dc_new.users WHERE id = $1`,
+        [authUser.id]
+      );
+      if (current.rows.length === 0) {
+        return reply.code(404).send({ error: "Пользователь не найден" });
+      }
+
+      if (email !== authUser.email) {
+        const existing = await client.query(
+          `SELECT id FROM dc_new.users WHERE email = $1 AND id != $2`,
+          [email, authUser.id]
+        );
+        if (existing.rows.length > 0) {
+          return reply.code(409).send({ error: "Этот логин уже занят" });
+        }
+      }
+
+      if (newPassword) {
+        const newHash = await bcrypt.hash(newPassword, 10);
+        await client.query(
+          `UPDATE dc_new.users
+           SET first_name = $1, last_name = $2, middle_name = $3, email = $4, password_hash = $5
+           WHERE id = $6`,
+          [firstName, lastName, middleName ?? null, email, newHash, authUser.id]
+        );
+      } else {
+        await client.query(
+          `UPDATE dc_new.users
+           SET first_name = $1, last_name = $2, middle_name = $3, email = $4
+           WHERE id = $5`,
+          [firstName, lastName, middleName ?? null, email, authUser.id]
+        );
+      }
+
+      let questionnaireCompleted: boolean | null = null;
+      if (authUser.role === "student") {
+        const q = await client.query(
+          `SELECT questionnaire_completed FROM dc_new.student_profiles WHERE user_id = $1`,
+          [authUser.id]
+        );
+        questionnaireCompleted = q.rows[0]?.questionnaire_completed ?? false;
+      }
+
+      const token = app.jwt.sign({ id: authUser.id, email, role: authUser.role });
+      return {
+        token,
+        user: {
+          id: authUser.id, email, role: authUser.role,
+          firstName, lastName, middleName: middleName ?? null,
+          questionnaireCompleted,
+        },
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      app.log.error(`Account credentials update error: ${errorMessage}`);
+      reply.code(500).send({ error: "Внутренняя ошибка сервера" });
+    } finally {
+      client.release();
+    }
+  }
+);
+
 // ─── Lookup tables ────────────────────────────────────────────────────────────
 
 // GET /api/disciplines — list all disciplines

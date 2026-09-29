@@ -64,7 +64,12 @@ export function Header() {
           </div>
         </Link>
         <div className="flex gap-3">
-          <Button variant="ghost" size="sm" className="bg-black hover:bg-black/80 text-white">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="bg-black hover:bg-black/80 text-white"
+            onClick={() => router.push('/profile')}
+          >
             <User className="w-4 h-4 mr-2" />
             Профиль
           </Button>
