@@ -190,9 +190,11 @@ export function BookAssistantDialog({ isOpen, onClose, student, onBooked }: Book
           <div className="flex items-center justify-between">
             <h2 className="min-w-0 truncate text-base font-bold text-[#2300fa]">
               Бронирование ассистента{" "}
+              {"<"}
               <span className="text-black">
-                {"<"}{student.last_name} {student.first_name}{">"}
+                {student.last_name} {student.first_name}
               </span>
+              {">"}
             </h2>
             <button
               onClick={onClose}
