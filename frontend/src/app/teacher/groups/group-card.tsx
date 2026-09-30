@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Trash2, Edit, X, Mail, BookOpen, GraduationCap, UsersRound, Send, DollarSign, CreditCard, UserCircle2, Tag } from "lucide-react"
+import { Trash2, Edit, Mail, BookOpen, GraduationCap, UsersRound, Send, DollarSign, CreditCard, UserCircle2, Tag } from "lucide-react"
 
 function ConfirmDeleteDialog({
   isOpen,
@@ -181,7 +181,7 @@ function NoAssistantCard({ discipline, faculty, program, modules, groupsCount, a
               title={partlyBooked ? "Удалить свободные места" : "Удалить курс"}
               onClick={() => setConfirmOpen(true)}
             >
-              <X className="h-4 w-4" />
+              <Trash2 className="h-3.5 w-3.5" />
             </Button>
           </div>
 
