@@ -3,16 +3,20 @@
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Trash2, Edit, Mail, BookOpen, GraduationCap, UsersRound, Send, DollarSign, CreditCard, UserCircle2, Tag } from "lucide-react"
+import { Trash2, Edit, X, Mail, BookOpen, GraduationCap, UsersRound, Send, DollarSign, CreditCard, UserCircle2, Tag } from "lucide-react"
 
 function ConfirmDeleteDialog({
   isOpen,
   onClose,
   onConfirm,
+  title = "Вы уверены, что хотите удалить эту запись?",
+  description = "Это действие необратимо.",
 }: {
   isOpen: boolean
   onClose: () => void
   onConfirm: () => void
+  title?: string
+  description?: string
 }) {
   const [isVisible, setIsVisible] = useState(false)
   const [isAnimating, setIsAnimating] = useState(false)
@@ -43,10 +47,8 @@ function ConfirmDeleteDialog({
           isAnimating ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-95 translate-y-4"
         }`}
       >
-        <p className="text-base font-bold text-black m-4 text-center">
-          Вы уверены, что хотите удалить эту запись?
-        </p>
-        <p className="text-sm text-gray-500 mb-6 text-center">Это действие необратимо.</p>
+        <p className="text-base font-bold text-black m-4 text-center">{title}</p>
+        <p className="text-sm text-gray-500 mb-6 text-center">{description}</p>
         <div className="flex gap-3">
           <Button
             variant="outline"
@@ -89,6 +91,7 @@ interface GroupCardProps {
   onEdit?: () => void
   onAccept?: () => void
   onDelete?: () => void
+  onRemoveFreeSlots?: () => void
 }
 
 function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
@@ -138,48 +141,73 @@ function ModulesRow({ groupsCount, modules }: { groupsCount: number; modules: nu
 }
 
 // ─── Card: Groups with open slots (none, or not all, assistants assigned) ────
-function NoAssistantCard({ discipline, faculty, program, modules, groupsCount, availableGroups, onSelectAssistant, onEdit }: GroupCardProps) {
+function NoAssistantCard({ discipline, faculty, program, modules, groupsCount, availableGroups, onSelectAssistant, onEdit, onRemoveFreeSlots }: GroupCardProps) {
+  const [confirmOpen, setConfirmOpen] = useState(false)
   const slotsLabel = availableGroups != null ? `${availableGroups} из ${groupsCount}` : String(groupsCount)
+  // Some groups are already booked → only the free slots go away
+  const partlyBooked = availableGroups != null && availableGroups < groupsCount
 
   return (
-    <Card className="bg-white shadow-sm hover:shadow-lg transition-shadow duration-300 border border-gray-100 rounded-2xl overflow-hidden flex flex-col">
-      <CardContent className="px-4 pb-1 flex-1 space-y-2.5">
+    <>
+      <ConfirmDeleteDialog
+        isOpen={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        onConfirm={() => { onRemoveFreeSlots?.(); setConfirmOpen(false) }}
+        title={partlyBooked ? "Удалить свободные места?" : "Удалить курс?"}
+        description={
+          partlyBooked
+            ? "Свободные группы будут удалены. Назначенные ассистенты останутся в разделе «Мои группы»."
+            : "Курс будет удалён из списка групп со свободными местами. Это действие необратимо."
+        }
+      />
+      <Card className="bg-white shadow-sm hover:shadow-lg transition-shadow duration-300 border border-gray-100 rounded-2xl overflow-hidden flex flex-col">
+        <CardContent className="px-4 pb-1 flex-1 space-y-2.5">
 
-        {/* Edit request */}
-        <div className="flex justify-end -mb-1">
+          {/* Edit / delete request */}
+          <div className="flex justify-end gap-1 -mb-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-gray-400 hover:text-[#2300fa] hover:bg-gray-100"
+              title="Редактировать заявку"
+              onClick={onEdit}
+            >
+              <Edit className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-[#ff1ef7] hover:text-[#ff1ef7] hover:bg-red-50"
+              title={partlyBooked ? "Удалить свободные места" : "Удалить курс"}
+              onClick={() => setConfirmOpen(true)}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+
+          {/* Each field on its own row, 2px gap */}
+          <div className="flex flex-col gap-2">
+            <InfoRow icon={<Tag className="h-3.5 w-3.5 text-black" />} label="Дисциплина" value={discipline} />
+            <InfoRow icon={<UserCircle2 className="h-3.5 w-3.5 text-black" />} label="Свободно групп" value={slotsLabel} />
+            <InfoRow icon={<GraduationCap className="h-3.5 w-3.5 text-black" />} label="Факультет" value={faculty} />
+            <InfoRow icon={<BookOpen className="h-3.5 w-3.5 text-black" />} label="Образовательная программа" value={program} />
+          </div>
+
+          {/* Groups count + Modules */}
+          <ModulesRow groupsCount={groupsCount} modules={modules} />
+        </CardContent>
+
+        <div className="mx-4 h-px bg-gray-100" />
+        <CardFooter className="px-4">
           <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 text-gray-400 hover:text-[#2300fa] hover:bg-gray-100"
-            title="Редактировать заявку"
-            onClick={onEdit}
+            className="w-full h-9 text-sm font-medium bg-[#DCFF05] hover:bg-[#c9eb00] text-black border border-black rounded-full transition-colors"
+            onClick={onSelectAssistant}
           >
-            <Edit className="h-3.5 w-3.5" />
+            Выбрать ассистента
           </Button>
-        </div>
-
-        {/* Each field on its own row, 2px gap */}
-        <div className="flex flex-col gap-2">
-          <InfoRow icon={<Tag className="h-3.5 w-3.5 text-black" />} label="Дисциплина" value={discipline} />
-          <InfoRow icon={<UserCircle2 className="h-3.5 w-3.5 text-black" />} label="Свободно групп" value={slotsLabel} />
-          <InfoRow icon={<GraduationCap className="h-3.5 w-3.5 text-black" />} label="Факультет" value={faculty} />
-          <InfoRow icon={<BookOpen className="h-3.5 w-3.5 text-black" />} label="Образовательная программа" value={program} />
-        </div>
-
-        {/* Groups count + Modules */}
-        <ModulesRow groupsCount={groupsCount} modules={modules} />
-      </CardContent>
-
-      <div className="mx-4 h-px bg-gray-100" />
-      <CardFooter className="px-4">
-        <Button
-          className="w-full h-9 text-sm font-medium bg-[#DCFF05] hover:bg-[#c9eb00] text-black border border-black rounded-full transition-colors"
-          onClick={onSelectAssistant}
-        >
-          Выбрать ассистента
-        </Button>
-      </CardFooter>
-    </Card>
+        </CardFooter>
+      </Card>
+    </>
   )
 }
 

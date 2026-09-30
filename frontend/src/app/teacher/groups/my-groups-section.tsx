@@ -80,6 +80,25 @@ export function MyGroupsSection() {
     }
   }
 
+  const handleRemoveFreeSlots = async (offerId: number) => {
+    try {
+      const token = localStorage.getItem("token")
+      const response = await fetch(
+        `${BACKEND_URL}/api/teacher/offers/${offerId}/free-slots`,
+        { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }
+      )
+      if (!response.ok) {
+        const body = await response.json().catch(() => null)
+        throw new Error(body?.error ?? "Не удалось удалить курс.")
+      }
+      const { archived } = await response.json()
+      await fetchGroups()
+      toast.success(archived ? "Курс удалён." : "Свободные места удалены.")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Не удалось удалить курс.")
+    }
+  }
+
   const handleCreateCourse = async (data: CreateCourseData) => {
     try {
       const token = localStorage.getItem("token")
@@ -272,6 +291,7 @@ export function MyGroupsSection() {
                     hideAssistantName={true}
                     onSelectAssistant={() => setSelectAssistantOffer(offer)}
                     onEdit={() => setEditingOffer(offer)}
+                    onRemoveFreeSlots={() => handleRemoveFreeSlots(offer.id)}
                   />
                 ))}
               </div>

@@ -1469,6 +1469,58 @@ app.get(
   }
 );
 
+// DELETE /api/teacher/offers/:offerId/free-slots — remove an offer's free groups.
+// With no bookings the offer is archived; otherwise total_groups shrinks to the
+// booked count so existing assistants keep their groups.
+app.delete<{ Params: { offerId: string } }>(
+  "/api/teacher/offers/:offerId/free-slots",
+  { preHandler: [app.authenticate] },
+  async (request, reply) => {
+    const user = request.user as { id: number; role: string };
+    if (user.role !== "teacher") {
+      return reply.code(403).send({ error: "Forbidden" });
+    }
+
+    const offerId = Number(request.params.offerId);
+    if (!offerId) {
+      return reply.code(400).send({ error: "Invalid offer id" });
+    }
+
+    const client = await app.pg.connect();
+    try {
+      // Single statement so the booked count can't change between read and write
+      const result = await client.query(
+        `UPDATE dc_new.course_offers co
+         SET status       = CASE WHEN booked.n = 0 THEN 'archived'::dc_new.offer_status ELSE co.status END,
+             total_groups = CASE WHEN booked.n = 0 THEN co.total_groups ELSE booked.n END,
+             updated_at   = now()
+         FROM (
+           SELECT COALESCE(SUM(COALESCE(b.num_groups, 1)), 0)::int AS n
+           FROM dc_new.bookings b
+           WHERE b.offer_id = $1 AND b.status IN ('active', 'pending')
+         ) AS booked
+         WHERE co.id = $1
+           AND co.teacher_id = $2
+           AND co.status = 'open'
+           AND co.total_groups > booked.n
+         RETURNING co.status, co.total_groups`,
+        [offerId, user.id]
+      );
+      if (result.rows.length === 0) {
+        return reply.code(404).send({ error: "Курс не найден или свободных мест нет" });
+      }
+      const row = result.rows[0];
+      return reply.code(200).send({
+        offerId,
+        archived: row.status === "archived",
+        totalGroups: row.total_groups,
+      });
+    } finally {
+      client.release();
+    }
+  }
+);
+
 // PATCH /api/teacher/bookings/:bookingId/accept — promote pending → active
 app.patch<{ Params: { bookingId: string } }>(
   "/api/teacher/bookings/:bookingId/accept",
