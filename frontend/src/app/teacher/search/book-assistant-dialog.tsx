@@ -35,9 +35,9 @@ function CurrentAssignmentsTable({ student }: { student: StudentSearchResult }) 
           <table className="w-full text-xs">
             <thead>
               <tr className="bg-gray-100 text-center text-[10px] text-[#2300fa]">
+                <th className="px-3 py-2 font-medium">Преподаватель</th>
                 <th className="px-3 py-2 font-medium">Факультет</th>
                 <th className="px-3 py-2 font-medium">Дисциплина</th>
-                <th className="px-3 py-2 font-medium">Преподаватель</th>
                 <th className="px-3 py-2 font-medium">Групп</th>
                 <th className="px-3 py-2 font-medium">Модули</th>
               </tr>
@@ -45,14 +45,14 @@ function CurrentAssignmentsTable({ student }: { student: StudentSearchResult }) 
             <tbody>
               {assignments.map((a) => (
                 <tr key={a.booking_id} className="border-t border-gray-100 align-middle">
-                  <td className="px-3 py-2 text-black">{a.faculty}</td>
+                  <td className="px-3 py-2 text-black text-center">{a.teacher || "—"}</td>
+                  <td className="px-3 py-2 text-black text-center">{a.faculty}</td>
                   <td className="px-3 py-2 text-black text-center">
                     <span className="font-medium">{a.discipline}</span>
                     {a.status === "pending" && (
                       <span className="block text-[10px] text-[#ff1ef7] mt-0.5">(ожидает подтверждения)</span>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-black text-center">{a.teacher || "—"}</td>
                   <td className="px-3 py-2 text-black text-center font-medium">{a.num_groups}</td>
                   <td className="px-3 py-2 text-black text-center whitespace-nowrap">
                     {formatModules(a.modules)}
