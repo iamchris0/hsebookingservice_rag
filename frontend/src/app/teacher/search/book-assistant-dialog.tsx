@@ -27,7 +27,7 @@ function CurrentAssignmentsTable({ student }: { student: StudentSearchResult }) 
     <div>
       <p className="text-xs font-medium text-[#2300fa] mb-2">Текущие группы ассистента</p>
       {assignments.length === 0 ? (
-        <div className="bg-gray-100 rounded-xl px-3 py-3 text-xs text-gray-500">
+        <div className="bg-gray-100 rounded-xl px-3 py-3 text-xs text-gray-500 text-center">
           Ассистент пока не закреплён ни за одной группой
         </div>
       ) : (
