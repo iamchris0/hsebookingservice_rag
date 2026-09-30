@@ -1,10 +1,12 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { Users } from "lucide-react"
 import { Input } from "@/components/ui/input"
+import { toDisplayDiscipline } from "@/lib/disciplines"
 import { AssistantCard } from "./assistant-card"
-import { Assistant, StudentSearchResult } from "../types"
+import { MultiSelectFilter } from "../components/multi-select-filter"
+import { Assistant, DisciplineOption, StudentSearchResult } from "../types"
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001"
 
@@ -31,9 +33,28 @@ function mapStudent(student: StudentSearchResult): Assistant {
   }
 }
 
+/**
+ * Rank of a student for the selected disciplines (lower comes first), or null
+ * if the student should be hidden:
+ *   0 — 1st priority is one of the selected disciplines
+ *   1 — 2nd priority is one of the selected disciplines
+ *   2 — no match, but the 2nd priority was skipped (still open to other disciplines)
+ */
+function disciplineRank(student: StudentSearchResult, selected: string[]): number | null {
+  const p1 = student.preferences.find((p) => p.priority === 1)
+  const p2 = student.preferences.find((p) => p.priority === 2)
+  if (p1 && selected.includes(p1.discipline)) return 0
+  if (p2 && selected.includes(p2.discipline)) return 1
+  if (!p2) return 2
+  return null
+}
+
 export function AssistantSearchSection() {
   const [students, setStudents] = useState<StudentSearchResult[]>([])
+  const [disciplines, setDisciplines] = useState<DisciplineOption[]>([])
   const [nameFilter, setNameFilter] = useState("")
+  const [selectedDisciplines, setSelectedDisciplines] = useState<string[]>([])
+  const [selectedPrograms, setSelectedPrograms] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -61,13 +82,44 @@ export function AssistantSearchSection() {
     fetchStudents()
   }, [fetchStudents])
 
-  const filtered = students.filter((s) =>
-    nameFilter
-      ? `${s.last_name} ${s.first_name}`.toLowerCase().includes(nameFilter.toLowerCase())
-      : true
+  useEffect(() => {
+    const token = localStorage.getItem("token")
+    fetch(`${BACKEND_URL}/api/disciplines`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: DisciplineOption[]) => setDisciplines(data))
+      .catch(() => setDisciplines([]))
+  }, [])
+
+  const disciplineOptions = disciplines.map((d) => ({ value: d.name, label: toDisplayDiscipline(d.name) }))
+
+  const programOptions = useMemo(
+    () =>
+      [...new Set(students.map((s) => s.edu_program).filter((p): p is string => Boolean(p)))]
+        .sort((a, b) => a.localeCompare(b, "ru"))
+        .map((p) => ({ value: p, label: p })),
+    [students]
   )
 
-  const filtersActive = nameFilter.trim().length > 0
+  const filtered = students
+    .filter((s) =>
+      nameFilter
+        ? `${s.last_name} ${s.first_name}`.toLowerCase().includes(nameFilter.toLowerCase())
+        : true
+    )
+    .filter((s) =>
+      selectedPrograms.length > 0 ? s.edu_program != null && selectedPrograms.includes(s.edu_program) : true
+    )
+    .map((s) => ({
+      student: s,
+      rank: selectedDisciplines.length > 0 ? disciplineRank(s, selectedDisciplines) : 0,
+    }))
+    .filter((r): r is { student: StudentSearchResult; rank: number } => r.rank !== null)
+    // Stable sort keeps the backend's alphabetical order within each rank
+    .sort((a, b) => a.rank - b.rank)
+    .map((r) => r.student)
+
+  const filtersActive =
+    nameFilter.trim().length > 0 || selectedDisciplines.length > 0 || selectedPrograms.length > 0
 
   return (
     <div className="space-y-6">
@@ -79,6 +131,18 @@ export function AssistantSearchSection() {
           className="w-[220px] bg-white rounded-full border-border"
           value={nameFilter}
           onChange={(e) => setNameFilter(e.target.value)}
+        />
+        <MultiSelectFilter
+          placeholder="Дисциплина"
+          options={disciplineOptions}
+          selected={selectedDisciplines}
+          onChange={setSelectedDisciplines}
+        />
+        <MultiSelectFilter
+          placeholder="Образовательная программа"
+          options={programOptions}
+          selected={selectedPrograms}
+          onChange={setSelectedPrograms}
         />
       </div>
 
@@ -107,7 +171,7 @@ export function AssistantSearchSection() {
             </p>
             <p className="text-sm text-gray-400 mt-1">
               {filtersActive
-                ? "Попробуйте изменить поисковый запрос"
+                ? "Попробуйте изменить поисковый запрос или фильтры"
                 : "Как только студенты зарегистрируются, они появятся здесь"}
             </p>
           </div>
