@@ -171,13 +171,6 @@ export interface StudentDetails {
 
 // Teacher dashboard (GET /api/teacher/analytics)
 
-export interface DisciplineSupply {
-  discipline: string
-  free_groups: number
-  p1_candidates: number
-  p2_candidates: number
-}
-
 export interface CourseFill {
   id: number
   discipline: string
@@ -189,14 +182,6 @@ export interface CourseFill {
   pending_count: number
 }
 
-export interface AssistantLoad {
-  free: number
-  partial: number
-  full: number
-}
-
 export interface TeacherAnalytics {
-  disciplines: DisciplineSupply[]
   courses: CourseFill[]
-  load: AssistantLoad
 }

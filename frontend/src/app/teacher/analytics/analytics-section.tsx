@@ -1,11 +1,9 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Layers, Users, CheckCircle2, Clock } from "lucide-react"
+import { CheckCircle2, Clock } from "lucide-react"
 import { TeacherAnalytics } from "../types"
-import { SupplyDemandChart } from "./supply-demand-chart"
 import { CoursesProgress } from "./courses-progress"
-import { LoadDonut } from "./load-donut"
 import { useCountUp } from "./chart-utils"
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001"
@@ -87,8 +85,6 @@ export function AnalyticsSection() {
     )
   }
 
-  const freeGroups = data.disciplines.reduce((s, d) => s + d.free_groups, 0)
-  const assistants = data.load.free + data.load.partial + data.load.full
   const myTotal = data.courses.reduce((s, c) => s + c.total_groups, 0)
   const myBooked = data.courses.reduce((s, c) => s + c.active_groups + c.pending_groups, 0)
   const pending = data.courses.reduce((s, c) => s + c.pending_count, 0)
@@ -97,9 +93,7 @@ export function AnalyticsSection() {
     <div className="space-y-6">
       <h1 className="text-3xl font-bold text-foreground">Аналитика</h1>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <StatTile icon={<Layers className="w-5 h-5 text-black" />} label="Свободных групп на платформе" value={freeGroups} />
-        <StatTile icon={<Users className="w-5 h-5 text-black" />} label="Ассистентов в базе" value={assistants} />
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <StatTile
           icon={<CheckCircle2 className="w-5 h-5 text-black" />}
           label="Мои группы закрыты"
@@ -109,12 +103,7 @@ export function AnalyticsSection() {
         <StatTile icon={<Clock className="w-5 h-5 text-black" />} label="Заявок ждут решения" value={pending} accent />
       </div>
 
-      <SupplyDemandChart data={data.disciplines} />
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <CoursesProgress courses={data.courses} />
-        <LoadDonut load={data.load} />
-      </div>
+      <CoursesProgress courses={data.courses} />
     </div>
   )
 }

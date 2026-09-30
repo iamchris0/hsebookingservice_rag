@@ -1598,7 +1598,7 @@ app.delete<{ Params: { bookingId: string } }>(
   }
 );
 
-// GET /api/teacher/analytics — aggregates for the teacher dashboard (no personal data)
+// GET /api/teacher/analytics — the current teacher's own course statistics
 app.get(
   "/api/teacher/analytics",
   { preHandler: [app.authenticate] },
@@ -1610,30 +1610,6 @@ app.get(
 
     const client = await app.pg.connect();
     try {
-      // Supply vs demand: free groups across all open offers vs candidates by priority
-      const disciplines = await client.query(
-        `SELECT
-           d.name AS discipline,
-           COALESCE((
-             SELECT SUM(GREATEST(co.total_groups - COALESCE((
-               SELECT SUM(COALESCE(b.num_groups, 1)) FROM dc_new.bookings b
-               WHERE b.offer_id = co.id AND b.status IN ('active', 'pending')
-             ), 0), 0))
-             FROM dc_new.course_offers co
-             WHERE co.discipline_id = d.id AND co.status = 'open'
-           ), 0)::int AS free_groups,
-           (SELECT COUNT(*) FROM dc_new.student_preferences spr
-            JOIN dc_new.student_profiles sp ON sp.user_id = spr.student_id
-            WHERE spr.discipline_id = d.id AND spr.priority = 1 AND sp.questionnaire_completed
-           )::int AS p1_candidates,
-           (SELECT COUNT(*) FROM dc_new.student_preferences spr
-            JOIN dc_new.student_profiles sp ON sp.user_id = spr.student_id
-            WHERE spr.discipline_id = d.id AND spr.priority = 2 AND sp.questionnaire_completed
-           )::int AS p2_candidates
-         FROM dc_new.disciplines d
-         ORDER BY d.name`
-      );
-
       // The current teacher's open courses and how full they are
       const courses = await client.query(
         `SELECT
@@ -1656,34 +1632,7 @@ app.get(
         [user.id]
       );
 
-      // Assistant load: assigned groups vs the most groups they asked for in any priority
-      const load = await client.query(
-        `WITH s AS (
-           SELECT
-             GREATEST(COALESCE((
-               SELECT MAX(COALESCE(spr.desired_group_size, 1)) FROM dc_new.student_preferences spr
-               WHERE spr.student_id = u.id
-             ), 1), 1) AS capacity,
-             COALESCE((
-               SELECT SUM(COALESCE(b.num_groups, 1)) FROM dc_new.bookings b
-               WHERE b.student_id = u.id AND b.status IN ('active', 'pending')
-             ), 0) AS assigned
-           FROM dc_new.users u
-           JOIN dc_new.student_profiles sp ON sp.user_id = u.id
-           WHERE u.role = 'student' AND sp.questionnaire_completed
-         )
-         SELECT
-           COUNT(*) FILTER (WHERE assigned = 0)::int                         AS free,
-           COUNT(*) FILTER (WHERE assigned > 0 AND assigned < capacity)::int AS partial,
-           COUNT(*) FILTER (WHERE assigned > 0 AND assigned >= capacity)::int AS full
-         FROM s`
-      );
-
-      return {
-        disciplines: disciplines.rows,
-        courses: courses.rows,
-        load: load.rows[0],
-      };
+      return { courses: courses.rows };
     } finally {
       client.release();
     }

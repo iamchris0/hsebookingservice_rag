@@ -2,14 +2,9 @@
 
 import { useEffect, useState } from "react"
 
-// Site palette used as data colors (validated as a CVD-safe pair)
+// Site blue as the data color; its tint backs the hatched "pending" state
 export const BLUE = "#2300fa"
-export const PINK = "#ff1ef7"
 export const BLUE_TINT = "#d9d4ff"
-export const PINK_TINT = "#ffd6fd"
-
-// Sequential blue ramp, light → dark, for ordered buckets
-export const BLUE_RAMP = ["#b8b0ff", "#6f5cff", "#2300fa"]
 
 // Diagonal hatch — secondary encoding for "same series, weaker state"
 export function hatch(color: string, tint: string, angle = 45) {
