@@ -177,7 +177,7 @@ export function BookAssistantDialog({ isOpen, onClose, student, onBooked }: Book
       onClick={handleBackdropClick}
     >
       <div
-        className="bg-white rounded-2xl w-full max-w-lg mx-4 flex flex-col shadow-2xl overflow-hidden"
+        className="bg-white rounded-2xl w-full max-w-2xl mx-4 flex flex-col shadow-2xl overflow-hidden"
         style={{
           maxHeight: "85vh",
           opacity: isAnimating ? 1 : 0,
