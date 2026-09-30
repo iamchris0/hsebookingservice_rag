@@ -37,6 +37,7 @@ function CurrentAssignmentsTable({ student }: { student: StudentSearchResult }) 
               <tr className="bg-gray-100 text-left text-[10px] text-[#2300fa]">
                 <th className="px-3 py-2 font-medium">Факультет</th>
                 <th className="px-3 py-2 font-medium">Дисциплина</th>
+                <th className="px-3 py-2 font-medium">Преподаватель</th>
                 <th className="px-3 py-2 font-medium text-center">Групп</th>
                 <th className="px-3 py-2 font-medium text-center">Модули</th>
               </tr>
@@ -51,6 +52,7 @@ function CurrentAssignmentsTable({ student }: { student: StudentSearchResult }) 
                       <span className="block text-[10px] text-gray-400 mt-0.5">ожидает подтверждения</span>
                     )}
                   </td>
+                  <td className="px-3 py-2 text-black">{a.teacher || "—"}</td>
                   <td className="px-3 py-2 text-black text-center font-medium">{a.num_groups}</td>
                   <td className="px-3 py-2 text-black text-center whitespace-nowrap">
                     {formatModules(a.modules)}

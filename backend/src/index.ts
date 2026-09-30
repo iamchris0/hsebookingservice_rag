@@ -1589,6 +1589,7 @@ app.get(
                'status',     b.status,
                'faculty',    f.name,
                'discipline', d.name,
+               'teacher',    TRIM(t.last_name || ' ' || t.first_name),
                'num_groups', COALESCE(b.num_groups, 1),
                'modules',    COALESCE((
                  SELECT array_agg(m.number ORDER BY m.number)
@@ -1602,6 +1603,7 @@ app.get(
              JOIN dc_new.disciplines d    ON d.id = co.discipline_id
              JOIN dc_new.programs p       ON p.id = co.program_id
              JOIN dc_new.faculties f      ON f.id = p.faculty_id
+             JOIN dc_new.users t          ON t.id = co.teacher_id
              WHERE b.student_id = u.id AND b.status IN ('active', 'pending')
            ), '[]'::json) AS assignments
          FROM dc_new.users u

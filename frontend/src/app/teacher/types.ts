@@ -55,6 +55,7 @@ export interface StudentAssignment {
   status: "pending" | "active"
   faculty: string
   discipline: string
+  teacher: string
   num_groups: number
   modules: number[]
 }
