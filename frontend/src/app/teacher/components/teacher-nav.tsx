@@ -31,7 +31,18 @@ export function TeacherNav() {
                 : "border-transparent text-muted-foreground hover:text-foreground",
             )}
           >
-            Поиск асситента
+            Поиск ассистента
+          </Link>
+          <Link
+            href="/teacher/analytics"
+            className={cn(
+              "px-6 py-4 text-sm font-medium transition-colors border-b-2",
+              pathname === "/teacher/analytics"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground",
+            )}
+          >
+            Аналитика
           </Link>
         </div>
       </div>
