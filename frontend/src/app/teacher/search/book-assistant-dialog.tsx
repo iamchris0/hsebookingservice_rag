@@ -188,12 +188,12 @@ export function BookAssistantDialog({ isOpen, onClose, student, onBooked }: Book
         {/* ── Header ── */}
         <div className="px-5 pt-4 pb-3 flex-shrink-0">
           <div className="flex items-center justify-between">
-            <div className="min-w-0">
-              <h2 className="text-base font-bold text-[#2300fa]">Бронирование ассистента</h2>
-              <p className="text-xs text-gray-500 truncate">
-                {student.last_name} {student.first_name}
-              </p>
-            </div>
+            <h2 className="min-w-0 truncate text-base font-bold text-[#2300fa]">
+              Бронирование ассистента{" "}
+              <span className="text-black">
+                {"<"}{student.last_name} {student.first_name}{">"}
+              </span>
+            </h2>
             <button
               onClick={onClose}
               className="p-1 hover:bg-gray-100 rounded-full transition-colors"
