@@ -49,7 +49,7 @@ export function GroupDetailsDialog({ isOpen, onClose, offer, booking }: GroupDet
         <div className="px-4 pt-3 pb-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3 min-w-0">
-              <h2 className="text-lg font-bold text-[#2300fa] flex-shrink-0">Group Details</h2>
+              <h2 className="text-lg font-bold text-[#2300fa] flex-shrink-0">Подробности бронирования</h2>
             </div>
             <button
               onClick={onClose}
@@ -70,7 +70,7 @@ export function GroupDetailsDialog({ isOpen, onClose, offer, booking }: GroupDet
               <div>
                 <div className="flex items-center gap-1.5 mb-1">
                   <UserCircle2 className="w-3.5 h-3.5 text-[#2300fa]" />
-                  <span className="text-xs font-bold text-[#2300fa]">Assistant</span>
+                  <span className="text-xs font-bold text-[#2300fa]">Ассистент</span>
                 </div>
                 <p className="text-sm text-black bg-gray-100 rounded-lg px-3 py-2">
                   {booking.student_last_name} {booking.student_first_name}
@@ -79,7 +79,7 @@ export function GroupDetailsDialog({ isOpen, onClose, offer, booking }: GroupDet
               <div>
                 <div className="flex items-center gap-1.5 mb-1">
                   <Mail className="w-3.5 h-3.5 text-[#2300fa]" />
-                  <span className="text-xs font-bold text-[#2300fa]">Email</span>
+                  <span className="text-xs font-bold text-[#2300fa]">Почта</span>
                 </div>
                 <p className="text-sm text-black bg-gray-100 rounded-lg px-3 py-2 truncate">{booking.student_email}</p>
               </div>
