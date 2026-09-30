@@ -1620,7 +1620,13 @@ app.get(
            co.total_groups,
            COALESCE(SUM(COALESCE(b.num_groups, 1)) FILTER (WHERE b.status = 'active'), 0)::int  AS active_groups,
            COALESCE(SUM(COALESCE(b.num_groups, 1)) FILTER (WHERE b.status = 'pending'), 0)::int AS pending_groups,
-           COUNT(b.id) FILTER (WHERE b.status = 'pending')::int AS pending_count
+           COUNT(b.id) FILTER (WHERE b.status = 'pending')::int AS pending_count,
+           COALESCE((
+             SELECT array_agg(m.number ORDER BY m.number)
+             FROM dc_new.course_offer_modules com
+             JOIN dc_new.modules m ON com.module_id = m.id
+             WHERE com.offer_id = co.id
+           ), ARRAY[]::int[]) AS modules
          FROM dc_new.course_offers co
          JOIN dc_new.disciplines d ON d.id = co.discipline_id
          JOIN dc_new.programs    p ON p.id = co.program_id
@@ -1632,7 +1638,26 @@ app.get(
         [user.id]
       );
 
-      return { courses: courses.rows };
+      // Assistants booked on this teacher's open courses and their share of the load
+      const assistants = await client.query(
+        `SELECT
+           u.id,
+           u.first_name,
+           u.last_name,
+           COALESCE(SUM(COALESCE(b.num_groups, 1)) FILTER (WHERE b.status = 'active'), 0)::int  AS active_groups,
+           COALESCE(SUM(COALESCE(b.num_groups, 1)) FILTER (WHERE b.status = 'pending'), 0)::int AS pending_groups,
+           COUNT(DISTINCT b.offer_id)::int AS courses,
+           array_agg(DISTINCT b.payment_type::text) AS payment_types
+         FROM dc_new.bookings b
+         JOIN dc_new.course_offers co ON co.id = b.offer_id
+         JOIN dc_new.users u ON u.id = b.student_id
+         WHERE co.teacher_id = $1 AND co.status = 'open' AND b.status IN ('active', 'pending')
+         GROUP BY u.id, u.first_name, u.last_name
+         ORDER BY SUM(COALESCE(b.num_groups, 1)) DESC, u.last_name, u.first_name`,
+        [user.id]
+      );
+
+      return { courses: courses.rows, assistants: assistants.rows };
     } finally {
       client.release();
     }

@@ -180,8 +180,20 @@ export interface CourseFill {
   active_groups: number
   pending_groups: number
   pending_count: number
+  modules: number[]
+}
+
+export interface MyAssistantLoad {
+  id: number
+  first_name: string
+  last_name: string
+  active_groups: number
+  pending_groups: number
+  courses: number
+  payment_types: ("money" | "credits")[]
 }
 
 export interface TeacherAnalytics {
   courses: CourseFill[]
+  assistants: MyAssistantLoad[]
 }

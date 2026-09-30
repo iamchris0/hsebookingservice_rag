@@ -4,6 +4,9 @@ import { useEffect, useState } from "react"
 import { CheckCircle2, Clock } from "lucide-react"
 import { TeacherAnalytics } from "../types"
 import { CoursesProgress } from "./courses-progress"
+import { ModuleWorkload } from "./module-workload"
+import { CourseTimeline } from "./course-timeline"
+import { MyAssistants } from "./my-assistants"
 import { useCountUp } from "./chart-utils"
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001"
@@ -102,6 +105,16 @@ export function AnalyticsSection() {
         />
         <StatTile icon={<Clock className="w-5 h-5 text-black" />} label="Заявок ждут решения" value={pending} accent />
       </div>
+
+      {data.courses.length > 0 && (
+        <>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <ModuleWorkload courses={data.courses} />
+            <MyAssistants assistants={data.assistants} />
+          </div>
+          <CourseTimeline courses={data.courses} />
+        </>
+      )}
 
       <CoursesProgress courses={data.courses} />
     </div>
