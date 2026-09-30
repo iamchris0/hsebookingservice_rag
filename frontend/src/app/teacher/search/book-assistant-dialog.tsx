@@ -44,7 +44,7 @@ function CurrentAssignmentsTable({ student }: { student: StudentSearchResult }) 
             </thead>
             <tbody>
               {assignments.map((a) => (
-                <tr key={a.booking_id} className="border-t border-gray-100 align-top">
+                <tr key={a.booking_id} className="border-t border-gray-100 align-middle">
                   <td className="px-3 py-2 text-black">{a.faculty}</td>
                   <td className="px-3 py-2 text-black text-center">
                     <span className="font-medium">{a.discipline}</span>
