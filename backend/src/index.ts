@@ -1582,7 +1582,28 @@ app.get(
              SELECT COUNT(*)
              FROM dc_new.bookings b
              WHERE b.student_id = u.id AND b.status = 'active'
-           ), 0)::int AS active_assignments
+           ), 0)::int AS active_assignments,
+           COALESCE((
+             SELECT json_agg(json_build_object(
+               'booking_id', b.id,
+               'status',     b.status,
+               'faculty',    f.name,
+               'discipline', d.name,
+               'num_groups', COALESCE(b.num_groups, 1),
+               'modules',    COALESCE((
+                 SELECT array_agg(m.number ORDER BY m.number)
+                 FROM dc_new.course_offer_modules com
+                 JOIN dc_new.modules m ON com.module_id = m.id
+                 WHERE com.offer_id = co.id
+               ), ARRAY[]::int[])
+             ) ORDER BY b.status, d.name)
+             FROM dc_new.bookings b
+             JOIN dc_new.course_offers co ON co.id = b.offer_id
+             JOIN dc_new.disciplines d    ON d.id = co.discipline_id
+             JOIN dc_new.programs p       ON p.id = co.program_id
+             JOIN dc_new.faculties f      ON f.id = p.faculty_id
+             WHERE b.student_id = u.id AND b.status IN ('active', 'pending')
+           ), '[]'::json) AS assignments
          FROM dc_new.users u
          LEFT JOIN dc_new.student_profiles sp ON sp.user_id = u.id
          WHERE u.role = 'student' and sp.questionnaire_completed = true

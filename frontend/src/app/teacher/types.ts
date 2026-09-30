@@ -47,6 +47,16 @@ export interface StudentSearchResult {
   edu_program: string | null
   preferences: StudentPreference[]
   active_assignments: number
+  assignments: StudentAssignment[]
+}
+
+export interface StudentAssignment {
+  booking_id: number
+  status: "pending" | "active"
+  faculty: string
+  discipline: string
+  num_groups: number
+  modules: number[]
 }
 
 export interface DisciplineStat {

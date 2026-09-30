@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Users } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { AssistantCard } from "./assistant-card"
@@ -32,37 +32,39 @@ function mapStudent(student: StudentSearchResult): Assistant {
 }
 
 export function AssistantSearchSection() {
-  const [students, setStudents] = useState<Assistant[]>([])
+  const [students, setStudents] = useState<StudentSearchResult[]>([])
   const [nameFilter, setNameFilter] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    const fetchStudents = async () => {
-      try {
-        const token = localStorage.getItem("token")
-        const response = await fetch(`${BACKEND_URL}/api/teacher/search`, {
-          headers: { Authorization: `Bearer ${token}` },
-        })
+  const fetchStudents = useCallback(async () => {
+    try {
+      const token = localStorage.getItem("token")
+      const response = await fetch(`${BACKEND_URL}/api/teacher/search`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
 
-        if (!response.ok) {
-          throw new Error("Не удалось загрузить список ассистентов")
-        }
-
-        const data: StudentSearchResult[] = await response.json()
-        setStudents(data.map(mapStudent))
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Ошибка загрузки")
-      } finally {
-        setIsLoading(false)
+      if (!response.ok) {
+        throw new Error("Не удалось загрузить список ассистентов")
       }
-    }
 
-    fetchStudents()
+      const data: StudentSearchResult[] = await response.json()
+      setStudents(data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ошибка загрузки")
+    } finally {
+      setIsLoading(false)
+    }
   }, [])
 
+  useEffect(() => {
+    fetchStudents()
+  }, [fetchStudents])
+
   const filtered = students.filter((s) =>
-    nameFilter ? s.name.toLowerCase().includes(nameFilter.toLowerCase()) : true
+    nameFilter
+      ? `${s.last_name} ${s.first_name}`.toLowerCase().includes(nameFilter.toLowerCase())
+      : true
   )
 
   const filtersActive = nameFilter.trim().length > 0
@@ -112,8 +114,13 @@ export function AssistantSearchSection() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filtered.map((assistant) => (
-            <AssistantCard key={assistant.id} {...assistant} />
+          {filtered.map((student) => (
+            <AssistantCard
+              key={student.id}
+              {...mapStudent(student)}
+              student={student}
+              onBooked={fetchStudents}
+            />
           ))}
         </div>
       )}

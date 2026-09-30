@@ -4,10 +4,14 @@ import { useState } from "react"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Star, GraduationCap, BookOpen, Mail, Send } from "lucide-react"
-import { Assistant } from "../types"
+import { Assistant, StudentSearchResult } from "../types"
 import { StudentDetailsDialog } from "../components/student-details-dialog"
+import { BookAssistantDialog } from "./book-assistant-dialog"
 
-type AssistantCardProps = Assistant
+type AssistantCardProps = Assistant & {
+  student: StudentSearchResult
+  onBooked: () => void
+}
 
 interface InfoRowProps {
   icon: React.ReactNode
@@ -43,9 +47,12 @@ export function AssistantCard({
   email,
   telegram,
   isFavorite,
+  student,
+  onBooked,
 }: AssistantCardProps) {
   const [favorite, setFavorite] = useState(isFavorite)
   const [detailsOpen, setDetailsOpen] = useState(false)
+  const [bookingOpen, setBookingOpen] = useState(false)
 
   return (
     <>
@@ -133,13 +140,19 @@ export function AssistantCard({
 
         <div className="mx-4 h-px bg-gray-100" />
 
-        <CardFooter className="px-4">
+        <CardFooter className="px-4 gap-2">
           <Button
             variant="outline"
-            className="w-full rounded-full border-[#2300fa] text-[#2300fa] bg-transparent hover:bg-blue-50 text-sm h-9"
+            className="flex-1 rounded-full border-[#2300fa] text-[#2300fa] bg-transparent hover:bg-blue-50 text-sm h-9"
             onClick={() => setDetailsOpen(true)}
           >
             Подробнее
+          </Button>
+          <Button
+            className="flex-1 rounded-full bg-black hover:bg-black/85 text-white text-sm h-9"
+            onClick={() => setBookingOpen(true)}
+          >
+            Выбрать
           </Button>
         </CardFooter>
       </Card>
@@ -148,6 +161,13 @@ export function AssistantCard({
         isOpen={detailsOpen}
         onClose={() => setDetailsOpen(false)}
         studentId={id}
+      />
+
+      <BookAssistantDialog
+        isOpen={bookingOpen}
+        onClose={() => setBookingOpen(false)}
+        student={student}
+        onBooked={onBooked}
       />
     </>
   )
