@@ -49,7 +49,7 @@ function CurrentAssignmentsTable({ student }: { student: StudentSearchResult }) 
                   <td className="px-3 py-2 text-black text-center">
                     <span className="font-medium">{a.discipline}</span>
                     {a.status === "pending" && (
-                      <span className="block text-[10px] text-gray-400 mt-0.5">ожидает подтверждения</span>
+                      <span className="block text-[10px] text-[#ff1ef7] mt-0.5">(ожидает подтверждения)</span>
                     )}
                   </td>
                   <td className="px-3 py-2 text-black text-center">{a.teacher || "—"}</td>
