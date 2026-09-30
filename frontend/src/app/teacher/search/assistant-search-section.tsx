@@ -139,7 +139,7 @@ export function AssistantSearchSection() {
           onChange={setSelectedDisciplines}
         />
         <MultiSelectFilter
-          placeholder="Образовательная программа"
+          placeholder="Обр. программа"
           options={programOptions}
           selected={selectedPrograms}
           onChange={setSelectedPrograms}
