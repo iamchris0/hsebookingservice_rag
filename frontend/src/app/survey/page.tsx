@@ -4,6 +4,9 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { getQuestionsForDiscipline, QuestionConfig } from './questions';
+import {
+  EducationOptions, OWN_VALUE_HINT, canonicalName, filterSuggestions, normalizeName, programNamesFor, useEducationOptions,
+} from '@/lib/education-options';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
 
@@ -104,17 +107,132 @@ function TextInput({
   );
 }
 
+// ─── Text input with suggestions ──────────────────────────────────────────────
+
+// Free text input that suggests values already in the database. On blur the
+// value is cleaned of extra spaces and snapped to an existing spelling.
+function ComboInput({
+  value,
+  onChange,
+  options,
+  placeholder,
+  hasError,
+  disabled,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+  placeholder?: string;
+  hasError?: boolean;
+  disabled?: boolean;
+}) {
+  const [focused, setFocused] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [highlighted, setHighlighted] = useState(-1);
+  const suggestions = filterSuggestions(options, value);
+  const showList = open && suggestions.length > 0;
+
+  const select = (option: string) => {
+    onChange(option);
+    setOpen(false);
+    setHighlighted(-1);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setOpen(true);
+      setHighlighted((h) => Math.min(h + 1, suggestions.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlighted((h) => Math.max(h - 1, 0));
+    } else if (e.key === 'Enter' && showList && highlighted >= 0) {
+      e.preventDefault();
+      select(suggestions[highlighted]);
+    } else if (e.key === 'Escape') {
+      setOpen(false);
+    }
+  };
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => { onChange(e.target.value); setOpen(true); setHighlighted(-1); }}
+        onKeyDown={handleKeyDown}
+        placeholder={placeholder}
+        disabled={disabled}
+        autoComplete="off"
+        onFocus={() => { setFocused(true); setOpen(true); }}
+        onBlur={() => {
+          setFocused(false);
+          setOpen(false);
+          const cleaned = canonicalName(options, value);
+          if (cleaned !== value) onChange(cleaned);
+        }}
+        style={{
+          width: '100%',
+          padding: '10px 0',
+          paddingRight: 20,
+          fontSize: 15,
+          color: '#111',
+          backgroundColor: 'transparent',
+          border: 'none',
+          borderBottom: `1.5px solid ${hasError ? '#e53e3e' : focused ? '#2300fa' : '#d1d5db'}`,
+          outline: 'none',
+          transition: 'border-color 0.15s',
+          boxSizing: 'border-box',
+        }}
+      />
+      {options.length > 0 && (
+        <span style={{
+          position: 'absolute', right: 4, top: '50%',
+          transform: 'translateY(-50%)', pointerEvents: 'none',
+          fontSize: 11, color: '#888',
+        }}>▾</span>
+      )}
+      {showList && (
+        <div style={{
+          position: 'absolute', zIndex: 10, top: '100%', left: 0, right: 0,
+          marginTop: 4, maxHeight: 200, overflowY: 'auto',
+          backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: 8,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+        }}>
+          {suggestions.map((option, i) => (
+            <div
+              key={option}
+              // mousedown, not click: fires before the input's blur closes the list
+              onMouseDown={(e) => { e.preventDefault(); select(option); }}
+              onMouseEnter={() => setHighlighted(i)}
+              style={{
+                padding: '8px 12px', fontSize: 14, color: '#111', cursor: 'pointer',
+                backgroundColor: i === highlighted ? '#f0edff' : 'transparent',
+              }}
+            >
+              {option}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Field wrapper ────────────────────────────────────────────────────────────
 
 function Field({
   label,
   error,
   hint,
+  description,
   children,
 }: {
   label: string;
   error?: string;
   hint?: string;
+  /** Small text shown right under the label */
+  description?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -122,6 +240,9 @@ function Field({
       <div style={{ fontSize: 13, fontWeight: 500, color: '#444', marginBottom: 2 }}>
         {label} <span style={{ color: '#e53e3e' }}>*</span>
       </div>
+      {description && (
+        <div style={{ fontSize: 12, color: '#999', marginBottom: 2 }}>{description}</div>
+      )}
       {children}
       {hint && !error && (
         <div style={{ fontSize: 12, color: '#999', marginTop: 4 }}>{hint}</div>
@@ -426,10 +547,11 @@ const onlyLetters = (v: string) => v.replace(/[^a-zA-Zа-яёА-ЯЁ\s-]/g, '');
 const onlyPhone   = (v: string) => v.replace(/[^0-9+\-().\s]/g, '');
 
 function Section1({
-  data, errors, loading,
+  data, errors, loading, options,
   onChange, onNext, onClear,
 }: {
   data: S1;
+  options: EducationOptions;
   errors: Partial<Record<keyof S1, string>>;
   loading: boolean;
   onChange: (f: keyof S1, v: string) => void;
@@ -469,12 +591,13 @@ function Section1({
             type="date" hasError={!!errors.birthday} disabled={loading} />
         </Field>
 
-        <Field label="Гражданство" error={errors.citizenship}>
-          <TextInput value={data.citizenship} onChange={(v) => onChange('citizenship', v)}
+        <Field label="Гражданство" description={OWN_VALUE_HINT} error={errors.citizenship}>
+          <ComboInput value={data.citizenship} onChange={(v) => onChange('citizenship', v)}
+            options={options.citizenships}
             placeholder="РФ" hasError={!!errors.citizenship} disabled={loading} />
         </Field>
 
-        <Field label="Электронная почта EDU.HSE" error={errors.hseEmail} hint="Например: ivanov@edu.hse.ru">
+        <Field label="Электронная почта EDU.HSE" error={errors.hseEmail}>
           <TextInput value={data.hseEmail} onChange={(v) => onChange('hseEmail', v)}
             placeholder="student@edu.hse.ru" type="email"
             hasError={!!errors.hseEmail} disabled={loading} />
@@ -531,10 +654,11 @@ const EXAMS: { key: keyof S2; label: string }[] = [
 const SCORE_OPTIONS = ['1','2','3','4','5','6','7','8','9','10'];
 
 function Section2({
-  data, errors, loading,
+  data, errors, loading, options,
   onChange, onNext, onBack, onClear,
 }: {
   data: S2;
+  options: EducationOptions;
   errors: Partial<Record<keyof S2, string>>;
   loading: boolean;
   onChange: (f: keyof S2, v: string) => void;
@@ -551,12 +675,14 @@ function Section2({
       <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
         {/* Faculty + Program */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32 }}>
-          <Field label="Факультет" error={errors.faculty}>
-            <TextInput value={data.faculty} onChange={(v) => onChange('faculty', v)}
+          <Field label="Факультет" description={OWN_VALUE_HINT} error={errors.faculty}>
+            <ComboInput value={data.faculty} onChange={(v) => onChange('faculty', v)}
+              options={options.faculties}
               placeholder="ФКН" hasError={!!errors.faculty} disabled={loading} />
           </Field>
-          <Field label="Образовательная программа" error={errors.program}>
-            <TextInput value={data.program} onChange={(v) => onChange('program', v)}
+          <Field label="Образовательная программа" description={OWN_VALUE_HINT} error={errors.program}>
+            <ComboInput value={data.program} onChange={(v) => onChange('program', v)}
+              options={programNamesFor(options, data.faculty)}
               placeholder="ПМИ" hasError={!!errors.program} disabled={loading} />
           </Field>
         </div>
@@ -1176,6 +1302,7 @@ export default function SurveyPage() {
 
   const [s2, setS2] = useState<S2>(emptyS2);
   const [s2Errors, setS2Errors] = useState<Partial<Record<keyof S2, string>>>({});
+  const educationOptions = useEducationOptions(!isLoading);
 
   const [disciplines, setDisciplines] = useState<{ id: number; name: string }[]>([]);
   const [s3, setS3] = useState<S3>(emptyS3);
@@ -1326,14 +1453,14 @@ export default function SurveyPage() {
         body: JSON.stringify({
           firstName: s1.firstName, lastName: s1.lastName, middleName: s1.middleName,
           telegram: s1.telegram, birthday: s1.birthday,
-          citizenship: s1.citizenship, phone: s1.phone,
+          citizenship: normalizeName(s1.citizenship), phone: s1.phone,
         }),
       });
 
       await step('Образование', '/api/student/education', {
         method: 'PUT', headers: h,
         body: JSON.stringify({
-          faculty: s2.faculty, program: s2.program,
+          faculty: normalizeName(s2.faculty), program: normalizeName(s2.program),
           studyYear: parseInt(s2.studyYear),
           hasDebts: s2.hasDebts === 'yes',
           rating: s2.rating,
@@ -1419,6 +1546,7 @@ export default function SurveyPage() {
               data={s1}
               errors={s1Errors}
               loading={saving}
+              options={educationOptions}
               onChange={(f, v) => {
                 setS1((p) => ({ ...p, [f]: v }));
                 setS1Errors((p) => ({ ...p, [f]: undefined }));
@@ -1432,6 +1560,7 @@ export default function SurveyPage() {
               data={s2}
               errors={s2Errors}
               loading={saving}
+              options={educationOptions}
               onChange={(f, v) => {
                 setS2((p) => ({ ...p, [f]: v }));
                 setS2Errors((p) => ({ ...p, [f]: undefined }));

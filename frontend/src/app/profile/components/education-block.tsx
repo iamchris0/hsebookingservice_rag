@@ -5,6 +5,8 @@ import { toast } from "sonner"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { SuggestInput } from "@/components/suggest-input"
+import { OWN_VALUE_HINT, normalizeName, programNamesFor, useEducationOptions } from "@/lib/education-options"
 import { AccountProfile } from "../types"
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001"
@@ -51,6 +53,7 @@ export function EducationBlock({ profile, onSaved }: EducationBlockProps) {
   const [form, setForm] = useState(saved)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const options = useEducationOptions()
 
   const isDirty = JSON.stringify(form) !== JSON.stringify(saved)
 
@@ -77,8 +80,8 @@ export function EducationBlock({ profile, onSaved }: EducationBlockProps) {
         method: "PUT",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          faculty: form.faculty,
-          program: form.program,
+          faculty: normalizeName(form.faculty),
+          program: normalizeName(form.program),
           studyYear: parseInt(form.studyYear, 10),
           hasDebts: form.hasDebts === "yes",
           rating: form.rating,
@@ -106,13 +109,17 @@ export function EducationBlock({ profile, onSaved }: EducationBlockProps) {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <Label htmlFor="ed-faculty">Факультет</Label>
-          <Input id="ed-faculty" value={form.faculty} disabled={saving}
-            onChange={(e) => update("faculty", e.target.value)} />
+          <p className="text-xs text-muted-foreground">{OWN_VALUE_HINT}</p>
+          <SuggestInput id="ed-faculty" value={form.faculty} disabled={saving}
+            options={options.faculties}
+            onChange={(v) => update("faculty", v)} />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="ed-program">Образовательная программа</Label>
-          <Input id="ed-program" value={form.program} disabled={saving}
-            onChange={(e) => update("program", e.target.value)} />
+          <p className="text-xs text-muted-foreground">{OWN_VALUE_HINT}</p>
+          <SuggestInput id="ed-program" value={form.program} disabled={saving}
+            options={programNamesFor(options, form.faculty)}
+            onChange={(v) => update("program", v)} />
         </div>
 
         <div className="space-y-1.5">
