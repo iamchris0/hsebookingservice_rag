@@ -468,7 +468,146 @@ app.put<{
   }
 );
 
-// ─── Lookup tables ────────────────────────────────────────────────────────────
+// Faculty / program names are typed by hand, so the same value arrives as
+// " ФКН", "ФКН  " or "фкн". Collapse whitespace and reuse the spelling that is
+// already stored (case-insensitively) so every variant ends up as one value.
+function normalizeName(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+const nameKey = (value: string) => normalizeName(value).toLowerCase();
+
+type QueryClient = { query: (text: string, params?: unknown[]) => Promise<{ rows: any[] }> };
+
+interface EducationNames {
+  faculties: string[];
+  programs: { name: string; faculty: string }[];
+  citizenships: string[];
+}
+
+// Faculty / program / citizenship names students have entered, one per name
+// ignoring case and spaces (the spelling most students use wins). Programs are
+// kept per faculty, so the form can suggest only the chosen faculty's programs.
+// Deduplicated here rather than in SQL: lower() ignores Cyrillic under the C locale.
+async function loadEducationNames(client: QueryClient): Promise<EducationNames> {
+  const [result, citizenshipResult] = await Promise.all([
+    client.query(
+      `SELECT edu_faculty AS faculty, edu_program AS program, count(*)::int AS uses
+       FROM dc_new.student_profiles
+       WHERE btrim(coalesce(edu_faculty, '')) <> ''
+       GROUP BY 1, 2`
+    ),
+    client.query(
+      `SELECT citizenship, count(*)::int AS uses
+       FROM dc_new.student_profiles
+       WHERE btrim(coalesce(citizenship, '')) <> ''
+       GROUP BY 1`
+    ),
+  ]);
+  const rows = result.rows as { faculty: string; program: string | null; uses: number }[];
+  const citizenshipRows = citizenshipResult.rows as { citizenship: string; uses: number }[];
+
+  // For every name (by key) count how many students use each spelling of it
+  const spellings = new Map<string, Map<string, number>>();
+  const count = (key: string, spelling: string, uses: number) => {
+    const byName = spellings.get(key) ?? new Map<string, number>();
+    byName.set(spelling, (byName.get(spelling) ?? 0) + uses);
+    spellings.set(key, byName);
+  };
+  const mostUsed = (key: string) =>
+    [...spellings.get(key)!].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "ru"))[0]![0];
+
+  for (const row of rows) {
+    count(`f|${nameKey(row.faculty)}`, normalizeName(row.faculty), row.uses);
+    if (row.program && normalizeName(row.program)) {
+      count(`p|${nameKey(row.faculty)}|${nameKey(row.program)}`, normalizeName(row.program), row.uses);
+    }
+  }
+  for (const row of citizenshipRows) {
+    count(`c|${nameKey(row.citizenship)}`, normalizeName(row.citizenship), row.uses);
+  }
+
+  const faculties = new Map<string, string>();
+  const programs = new Map<string, { name: string; faculty: string }>();
+  for (const row of rows) {
+    const faculty = mostUsed(`f|${nameKey(row.faculty)}`);
+    faculties.set(nameKey(faculty), faculty);
+    if (!row.program || !normalizeName(row.program)) continue;
+    const key = `p|${nameKey(row.faculty)}|${nameKey(row.program)}`;
+    programs.set(key, { name: mostUsed(key), faculty });
+  }
+
+  const citizenships = new Map<string, string>();
+  for (const row of citizenshipRows) {
+    const citizenship = mostUsed(`c|${nameKey(row.citizenship)}`);
+    citizenships.set(nameKey(citizenship), citizenship);
+  }
+
+  const byName = (a: string, b: string) => a.localeCompare(b, "ru");
+  return {
+    faculties: [...faculties.values()].sort(byName),
+    programs: [...programs.values()].sort((a, b) => byName(a.name, b.name)),
+    citizenships: [...citizenships.values()].sort(byName),
+  };
+}
+
+// Existing spelling of a faculty, or the typed one cleaned of extra spaces
+function canonicalFaculty(names: EducationNames, value: string): string {
+  return names.faculties.find((f) => nameKey(f) === nameKey(value)) ?? normalizeName(value);
+}
+
+// Existing spelling of a citizenship, or the typed one cleaned of extra spaces
+function canonicalCitizenship(names: EducationNames, value: string): string {
+  return names.citizenships.find((c) => nameKey(c) === nameKey(value)) ?? normalizeName(value);
+}
+
+// Existing spelling of a program within its faculty, or the typed one cleaned
+function canonicalProgram(names: EducationNames, faculty: string, value: string): string {
+  return names.programs.find(
+    (p) => nameKey(p.faculty) === nameKey(faculty) && nameKey(p.name) === nameKey(value)
+  )?.name ?? normalizeName(value);
+}
+
+// Bring names saved before normalization existed to their canonical spelling
+async function normalizeStoredEducationNames(client: QueryClient): Promise<number> {
+  const names = await loadEducationNames(client);
+  const result = await client.query(
+    `SELECT user_id, edu_faculty, edu_program, citizenship
+     FROM dc_new.student_profiles
+     WHERE edu_faculty IS NOT NULL OR edu_program IS NOT NULL OR citizenship IS NOT NULL`
+  );
+  let updated = 0;
+  type Row = { user_id: number; edu_faculty: string | null; edu_program: string | null; citizenship: string | null };
+  for (const row of result.rows as Row[]) {
+    const faculty = row.edu_faculty === null ? null : canonicalFaculty(names, row.edu_faculty);
+    const program = row.edu_program === null ? null
+      : canonicalProgram(names, faculty ?? "", row.edu_program);
+    const citizenship = row.citizenship === null ? null : canonicalCitizenship(names, row.citizenship);
+    if (faculty === row.edu_faculty && program === row.edu_program && citizenship === row.citizenship) continue;
+    await client.query(
+      `UPDATE dc_new.student_profiles
+       SET edu_faculty = $1, edu_program = $2, citizenship = $3
+       WHERE user_id = $4`,
+      [faculty, program, citizenship, row.user_id]
+    );
+    updated++;
+  }
+  return updated;
+}
+
+app.addHook("onReady", async () => {
+  const client = await app.pg.connect();
+  try {
+    const updated = await normalizeStoredEducationNames(client);
+    if (updated > 0) app.log.info(`Нормализованы факультет / программа / гражданство в ${updated} анкетах`);
+  } catch (error) {
+    // Not critical for serving requests: suggestions and new saves normalize anyway
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    app.log.warn(`Не удалось нормализовать факультеты / программы / гражданство: ${errorMessage}`);
+  } finally {
+    client.release();
+  }
+});
 
 // GET /api/disciplines — list all disciplines
 app.get(
@@ -518,6 +657,21 @@ app.get(
          ORDER BY f.name, p.name`
       );
       return result.rows;
+    } finally {
+      client.release();
+    }
+  }
+);
+
+// GET /api/education-options — unique faculty / program / citizenship names
+// students have entered, for the form suggestions
+app.get(
+  "/api/education-options",
+  { preHandler: [app.authenticate] },
+  async (_request, _reply) => {
+    const client = await app.pg.connect();
+    try {
+      return await loadEducationNames(client);
     } finally {
       client.release();
     }
@@ -676,7 +830,9 @@ app.put<{
         `UPDATE dc_new.student_profiles
          SET telegram = $1, birthday = $2, citizenship = $3, phone = $4
          WHERE user_id = $5`,
-        [telegram, birthday, citizenship, phone, user.id]
+        [telegram, birthday,
+         citizenship ? canonicalCitizenship(await loadEducationNames(client), citizenship) : citizenship,
+         phone, user.id]
       );
 
       return { success: true };
@@ -710,16 +866,23 @@ app.put<{
     const { faculty, program, studyYear, hasDebts, rating,
             digitalLiteracyScore, programmingScore, dataAnalysisScore } = request.body;
 
+    if (!faculty?.trim() || !program?.trim()) {
+      return reply.code(400).send({ error: "Укажите факультет и образовательную программу" });
+    }
+
     const client = await app.pg.connect();
     try {
+      const names = await loadEducationNames(client);
+      const facultyName = canonicalFaculty(names, faculty);
+      const programName = canonicalProgram(names, facultyName, program);
       await client.query(
         `UPDATE dc_new.student_profiles
          SET edu_faculty = $1, edu_program = $2, study_year = $3, debts = $4,
              edu_rating = $5, digital_literacy_score = $6,
              python_score = $7, data_analysis_score = $8
          WHERE user_id = $9`,
-        [faculty, program, studyYear, hasDebts ? 'yes' : 'no',
-         rating, digitalLiteracyScore, programmingScore, dataAnalysisScore, user.id]
+        [facultyName, programName, studyYear, hasDebts ? 'yes' : 'no',
+         rating.trim(), digitalLiteracyScore, programmingScore, dataAnalysisScore, user.id]
       );
       return { success: true };
     } finally {
@@ -1057,7 +1220,7 @@ app.post<{
          VALUES ($1)
          ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
          RETURNING id`,
-        [facultyName.trim()]
+        [normalizeName(facultyName)]
       );
       const facultyId = facultyResult.rows[0].id;
 
@@ -1067,7 +1230,7 @@ app.post<{
          VALUES ($1, $2)
          ON CONFLICT (faculty_id, name) DO UPDATE SET name = EXCLUDED.name
          RETURNING id`,
-        [facultyId, programName.trim()]
+        [facultyId, normalizeName(programName)]
       );
       const programId = programResult.rows[0].id;
 
@@ -1185,7 +1348,7 @@ app.put<{
          VALUES ($1)
          ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
          RETURNING id`,
-        [facultyName.trim()]
+        [normalizeName(facultyName)]
       );
       const facultyId = facultyResult.rows[0].id;
 
@@ -1195,7 +1358,7 @@ app.put<{
          VALUES ($1, $2)
          ON CONFLICT (faculty_id, name) DO UPDATE SET name = EXCLUDED.name
          RETURNING id`,
-        [facultyId, programName.trim()]
+        [facultyId, normalizeName(programName)]
       );
       const programId = programResult.rows[0].id;
 
@@ -1329,7 +1492,7 @@ app.put<{
          VALUES ($1)
          ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
          RETURNING id`,
-        [facultyName.trim()]
+        [normalizeName(facultyName)]
       );
       const facultyId = facultyResult.rows[0].id;
 
@@ -1339,7 +1502,7 @@ app.put<{
          VALUES ($1, $2)
          ON CONFLICT (faculty_id, name) DO UPDATE SET name = EXCLUDED.name
          RETURNING id`,
-        [facultyId, programName.trim()]
+        [facultyId, normalizeName(programName)]
       );
       const programId = programResult.rows[0].id;
 

@@ -4,6 +4,8 @@ import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { SuggestInput } from "@/components/suggest-input"
+import { OWN_VALUE_HINT, normalizeName, useEducationOptions } from "@/lib/education-options"
 import { AccountProfile } from "../types"
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001"
@@ -34,6 +36,7 @@ export function AboutBlock({ profile, onSaved }: AboutBlockProps) {
   const [form, setForm] = useState(saved)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const options = useEducationOptions()
 
   // The name fields live and save separately in the Личная информация block;
   // keep this block sending whatever was most recently persisted for them.
@@ -68,6 +71,7 @@ export function AboutBlock({ profile, onSaved }: AboutBlockProps) {
           lastName: profile.lastName,
           middleName: profile.middleName,
           ...form,
+          citizenship: normalizeName(form.citizenship),
         }),
       })
       if (!response.ok) {
@@ -99,8 +103,10 @@ export function AboutBlock({ profile, onSaved }: AboutBlockProps) {
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="ab-citizenship">Гражданство</Label>
-          <Input id="ab-citizenship" value={form.citizenship} disabled={saving}
-            onChange={(e) => update("citizenship", e.target.value)} />
+          <p className="text-xs text-muted-foreground">{OWN_VALUE_HINT}</p>
+          <SuggestInput id="ab-citizenship" value={form.citizenship} disabled={saving}
+            options={options.citizenships}
+            onChange={(v) => update("citizenship", v)} />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="ab-phone">Телефон</Label>
