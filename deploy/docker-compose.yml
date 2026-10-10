@@ -1,0 +1,106 @@
+# Продакшен-развёртывание: Caddy (HTTPS) + frontend + backend + PostgreSQL + еженедельный бэкап.
+# Запуск из папки deploy/:  docker compose up -d --build
+# Наружу опубликован только порт 443 (Caddy). Остальные сервисы доступны лишь во внутренней сети.
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "443:443"
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+      - backend
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ../frontend
+      args:
+        NEXT_PUBLIC_BACKEND_URL: https://${SITE_DOMAIN}
+    environment:
+      NODE_ENV: production
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ../backend
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      TRUST_PROXY: "true"
+      HOST: 0.0.0.0
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      STAFF_SECRET: ${STAFF_SECRET}
+      CORS_ORIGIN: https://${SITE_DOMAIN}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      TZ: Europe/Moscow
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      # Скрипты выполняются только при первом запуске, когда том pg_data пуст.
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  backup:
+    image: postgres:17-alpine
+    environment:
+      PGHOST: postgres
+      PGDATABASE: ${POSTGRES_DB}
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      BACKUP_KEEP: ${BACKUP_KEEP:-8}
+      TZ: Europe/Moscow
+    volumes:
+      - ./backup/backup.sh:/usr/local/bin/backup.sh:ro
+      - ${BACKUP_DIR:-/root/backups}:/backups
+    # Каждое воскресенье в 03:00 по Москве.
+    entrypoint: ["/bin/sh", "-c", "echo '0 3 * * 0 /bin/sh /usr/local/bin/backup.sh' > /etc/crontabs/root && exec crond -f -l 8"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pg_data:
+  caddy_data:
+  caddy_config:

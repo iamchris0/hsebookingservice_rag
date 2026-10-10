@@ -25,6 +25,9 @@ for (const envVar of requiredEnvVars) {
 }
 
 const app = Fastify({
+  // За reverse proxy (Caddy): берём IP клиента из X-Forwarded-For, иначе rate limit
+  // считал бы всех пользователей одним клиентом.
+  trustProxy: process.env.TRUST_PROXY === "true",
   logger: {
     level: process.env.NODE_ENV === "production" ? "info" : "debug",
   },

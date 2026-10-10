@@ -127,6 +127,7 @@ dmypy.json
 *.sqlite3
 *.db
 *.sql
+!deploy/db/init/*.sql
 
 # ====================
 # Project Specific
