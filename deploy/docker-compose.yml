@@ -85,16 +85,23 @@ services:
     restart: unless-stopped
 
   backup:
-    image: postgres:17-alpine
+    build:
+      context: ./backup
     environment:
       PGHOST: postgres
       PGDATABASE: ${POSTGRES_DB}
       PGUSER: ${POSTGRES_USER}
       PGPASSWORD: ${POSTGRES_PASSWORD}
       BACKUP_KEEP: ${BACKUP_KEEP:-8}
+      YADISK_DIR: ${YADISK_DIR:-hsebooking-backups}
+      YADISK_KEEP_DAYS: ${YADISK_KEEP_DAYS:-90}
+      RCLONE_CONFIG: /config/rclone/rclone.conf
       TZ: Europe/Moscow
     volumes:
       - ./backup/backup.sh:/usr/local/bin/backup.sh:ro
+      - ./backup/setup-yandex.sh:/usr/local/bin/setup-yandex.sh:ro
+      # Доступ к Яндекс Диску (создаётся setup-yandex.sh, в git не попадает).
+      - ./backup/rclone:/config/rclone
       - ${BACKUP_DIR:-/root/backups}:/backups
     # Каждое воскресенье в 03:00 по Москве.
     entrypoint: ["/bin/sh", "-c", "echo '0 3 * * 0 /bin/sh /usr/local/bin/backup.sh' > /etc/crontabs/root && exec crond -f -l 8"]
