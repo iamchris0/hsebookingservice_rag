@@ -15,3 +15,8 @@
 		reverse_proxy frontend:3000
 	}
 }
+
+# Старые и альтернативные адреса (www, временный sslip.io) -> основной домен.
+{$REDIRECT_DOMAINS} {
+	redir https://{$SITE_DOMAIN}{uri} permanent
+}
