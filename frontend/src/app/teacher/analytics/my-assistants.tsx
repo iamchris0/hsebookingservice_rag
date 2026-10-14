@@ -39,7 +39,8 @@ export function MyAssistants({ assistants }: { assistants: MyAssistantLoad[] }) 
             <LegendItem swatch={{ background: hatch(BLUE, BLUE_TINT) }} label="Ожидает решения" />
           </div>
 
-          <div className="flex flex-col gap-3">
+          {/* ~6 assistants visible, the rest scrolls inside the card */}
+          <div className="flex flex-col gap-3 max-h-[340px] overflow-y-auto pr-2 -mr-2">
             {assistants.map((a, i) => {
               const total = a.active_groups + a.pending_groups
               return (
