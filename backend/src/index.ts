@@ -160,7 +160,7 @@ app.post<{
   try {
     const client = await app.pg.connect();
     const result = await client.query(
-      "SELECT id, password_hash, role, first_name, last_name FROM dc_new.users WHERE email = $1",
+      "SELECT id, password_hash, role, first_name, last_name FROM dc_new.users WHERE lower(email) = lower($1)",
       [email]
     );
 
@@ -236,7 +236,7 @@ app.post<{
   const client = await app.pg.connect();
   try {
     const existing = await client.query(
-      "SELECT id FROM dc_new.users WHERE email = $1",
+      "SELECT id FROM dc_new.users WHERE lower(email) = lower($1)",
       [email]
     );
     if (existing.rows.length > 0) {
@@ -418,7 +418,7 @@ app.put<{
 
       if (email !== authUser.email) {
         const existing = await client.query(
-          `SELECT id FROM dc_new.users WHERE email = $1 AND id != $2`,
+          `SELECT id FROM dc_new.users WHERE lower(email) = lower($1) AND id != $2`,
           [email, authUser.id]
         );
         if (existing.rows.length > 0) {

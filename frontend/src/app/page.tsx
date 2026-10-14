@@ -95,6 +95,12 @@ export default function Login() {
         {error && (
           <div className="mb-5 px-5 py-3 rounded-lg" style={{ backgroundColor: '#fee', border: '2px solid #fcc' }}>
             <p className="text-sm" style={{ color: '#c00' }}>{error}</p>
+            {error === 'Неверные данные входа' && (
+              <p className="text-sm mt-2" style={{ color: '#c00' }}>
+                Если ваш аккаунт был перенесён из прежней системы, попробуйте <b>временный пароль</b>,
+                который вам прислали, а после входа обязательно смените его в личном кабинете.
+              </p>
+            )}
           </div>
         )}
 
