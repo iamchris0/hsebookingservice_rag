@@ -3,9 +3,11 @@
 import { useState } from "react"
 import { ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Textarea } from "@/components/ui/textarea"
 import { StudentSearchResult } from "../types"
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001"
+const COMMENT_MAX_LENGTH = 1000
 
 export interface BookingOffer {
   id: number
@@ -37,6 +39,7 @@ export function BookingForm({
 }: BookingFormProps) {
   const [numGroups, setNumGroups] = useState(1)
   const [paymentType, setPaymentType] = useState<"money" | "credits">("money")
+  const [comment, setComment] = useState("")
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
@@ -53,7 +56,13 @@ export function BookingForm({
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ offerId: offer.id, studentId: student.id, numGroups, paymentType }),
+        body: JSON.stringify({
+          offerId: offer.id,
+          studentId: student.id,
+          numGroups,
+          paymentType,
+          comment: comment.trim() || null,
+        }),
       })
 
       if (!response.ok) {
@@ -142,6 +151,23 @@ export function BookingForm({
               </button>
             ))}
           </div>
+        </div>
+
+        {/* Comment for the manager */}
+        <div>
+          <p className="text-xs font-medium text-[#2300fa] mb-2">
+            Комментарий
+            <span className="text-gray-400 font-normal ml-1">(для менеджера, необязательно)</span>
+          </p>
+          <Textarea
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            maxLength={COMMENT_MAX_LENGTH}
+            rows={3}
+            disabled={isSaving}
+            placeholder="Например, особые условия работы ассистента"
+            className="text-sm resize-none"
+          />
         </div>
 
         {saveError && (

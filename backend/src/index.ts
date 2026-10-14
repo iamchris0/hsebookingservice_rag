@@ -2000,6 +2000,7 @@ app.post<{
     studentId: number;
     numGroups: number;
     paymentType?: "money" | "credits";
+    comment?: string | null;
   };
 }>(
   "/api/teacher/assign",
@@ -2010,10 +2011,18 @@ app.post<{
       return reply.code(403).send({ error: "Forbidden" });
     }
 
-    const { offerId, studentId, numGroups, paymentType = "money" } = request.body;
+    const { offerId, studentId, numGroups, paymentType = "money", comment } = request.body;
 
     if (!offerId || !studentId || !numGroups) {
       return reply.code(400).send({ error: "Некорректные данные запроса" });
+    }
+
+    if (comment != null && typeof comment !== "string") {
+      return reply.code(400).send({ error: "Некорректный комментарий" });
+    }
+    const commentText = comment?.trim() || null;
+    if (commentText && commentText.length > 1000) {
+      return reply.code(400).send({ error: "Комментарий не должен превышать 1000 символов" });
     }
 
     if (!["money", "credits"].includes(paymentType)) {
@@ -2065,19 +2074,20 @@ app.post<{
       // row rather than insert a new one.
       const insertResult = await client.query(
         `INSERT INTO dc_new.bookings
-           (offer_id, student_id, payment_type, num_groups, status, created_by_teacher_id, created_at)
-         VALUES ($1, $2, $3, $4, 'active', $5, now())
+           (offer_id, student_id, payment_type, num_groups, status, created_by_teacher_id, comment, created_at)
+         VALUES ($1, $2, $3, $4, 'active', $5, $6, now())
          ON CONFLICT (offer_id, student_id) DO UPDATE
            SET status                = 'active',
                payment_type          = EXCLUDED.payment_type,
                num_groups            = EXCLUDED.num_groups,
                created_by_teacher_id = EXCLUDED.created_by_teacher_id,
+               comment               = EXCLUDED.comment,
                cancelled_at          = NULL,
                cancelled_by_user_id  = NULL,
                created_at            = now()
            WHERE dc_new.bookings.status = 'cancelled'
          RETURNING id`,
-        [offerId, studentId, paymentType, groups, user.id]
+        [offerId, studentId, paymentType, groups, user.id, commentText]
       );
 
       if (insertResult.rows.length === 0) {
