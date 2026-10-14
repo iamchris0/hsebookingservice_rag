@@ -66,18 +66,35 @@ services:
 
   postgres:
     image: postgres:17-alpine
-    # Только localhost сервера: для DBeaver через SSH-туннель, из интернета недоступно.
+    command:
+      - postgres
+      - -c
+      - ssl=on
+      - -c
+      - ssl_cert_file=/etc/postgresql/ssl/server.crt
+      - -c
+      - ssl_key_file=/etc/postgresql/ssl/server.key
+      - -c
+      - hba_file=/etc/postgresql/pg_hba.conf
     ports:
+      # Localhost сервера: для DBeaver через SSH-туннель.
       - "127.0.0.1:5432:5432"
+      # Для DataLens. Только IPv4: доступ ограничен их адресами в firewall (DOCKER-USER) и в pg_hba.conf.
+      - "0.0.0.0:6432:5432"
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      VIEWER_PASSWORD: ${VIEWER_PASSWORD:-}
       TZ: Europe/Moscow
     volumes:
       - pg_data:/var/lib/postgresql/data
       # Скрипты выполняются только при первом запуске, когда том pg_data пуст.
       - ./db/init:/docker-entrypoint-initdb.d:ro
+      - ./db/viewer.sql:/etc/postgresql/viewer.sql:ro
+      - ./db/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      # Сертификат TLS (создаётся на сервере, в git не попадает).
+      - ./db/ssl:/etc/postgresql/ssl:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s

@@ -129,6 +129,7 @@ dmypy.json
 *.sql
 !deploy/db/init/*.sql
 deploy/backup/rclone/
+deploy/db/ssl/
 
 # ====================
 # Project Specific
