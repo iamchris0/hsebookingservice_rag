@@ -10,12 +10,23 @@ const roboto = Roboto({
   weight: ["300", "400", "500", "700", "900"],
 })
 
+const description = "Бронирование ассистентов для курсов Data Culture НИУ ВШЭ"
+
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3000"),
   title: "DC Assist",
-  description: "Created with v0",
-  generator: "v0.app",
+  description,
   icons: {
     icon: "/logo.png",
+  },
+  // Превью ссылки в Telegram и других мессенджерах
+  openGraph: {
+    title: "DC Assist",
+    description,
+    siteName: "DC Assist",
+    locale: "ru_RU",
+    type: "website",
+    images: [{ url: "/logo.png", width: 300, height: 198 }],
   },
 }
 
@@ -25,7 +36,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
+    <html lang="ru">
       <body className={`${roboto.className} antialiased`}>
         {children}
         <Toaster />
