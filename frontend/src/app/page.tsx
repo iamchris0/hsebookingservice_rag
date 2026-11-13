@@ -115,7 +115,7 @@ export default function Login() {
                 setEmail(e.target.value);
                 setError('');
               }}
-              placeholder="Login"
+              placeholder="Login (e-mail)"
               className="w-full px-5 py-4 text-base outline-none transition-all"
               style={{ 
                 backgroundColor: '#f8f8f8',
