@@ -330,6 +330,113 @@ async function tellDcAboutProfile(p: { taDcId: number; lastName: string; firstNa
   }
 }
 
+// Предложения курсов из реестра DC: менеджер назначил преподавателя на курс — у преподавателя появляется
+// предложение (группы без ассистентов). Реестр сам находит уже созданные преподавателем предложения, чтобы не было дублей.
+type DcOfferBody = {
+  teacherId?: number; subject?: string; facultyName?: string; programName?: string;
+  totalGroups?: number; modules?: number[]; archive?: boolean;
+};
+
+/** Справочники для реестра: программы с факультетами и предметы. */
+app.get("/api/dc/service/catalog", { preHandler: [requireDcService] }, async () => {
+  const programs = await app.pg.query(
+    `SELECT p.name AS program, f.name AS faculty FROM dc_new.programs p JOIN dc_new.faculties f ON f.id = p.faculty_id ORDER BY 2, 1`);
+  const subjects = await app.pg.query("SELECT name FROM dc_new.disciplines ORDER BY name");
+  return { programs: programs.rows, subjects: subjects.rows.map((r: { name: string }) => r.name) };
+});
+
+/** Предложения преподавателя с бронями — чтобы реестр связал уже существующее, а не создал второе. */
+app.get<{ Params: { id: string } }>("/api/dc/service/teachers/:id/offers", { preHandler: [requireDcService] }, async (request) => {
+  const { rows } = await app.pg.query(
+    `SELECT co.id, co.teacher_id AS "teacherId", d.name AS discipline, p.name AS program, f.name AS faculty,
+            co.total_groups AS groups, co.status, co.created_at AS "createdAt",
+            coalesce((SELECT json_agg(m.number ORDER BY m.number) FROM dc_new.course_offer_modules om
+                      JOIN dc_new.modules m ON m.id = om.module_id WHERE om.offer_id = co.id), '[]') AS modules,
+            (SELECT json_build_object(
+               'active', count(*) FILTER (WHERE b.status = 'active'), 'pending', count(*) FILTER (WHERE b.status = 'pending'),
+               'money', count(*) FILTER (WHERE b.status <> 'cancelled' AND b.payment_type = 'money'),
+               'credits', count(*) FILTER (WHERE b.status <> 'cancelled' AND b.payment_type = 'credits'),
+               'groups', coalesce(sum(b.num_groups) FILTER (WHERE b.status <> 'cancelled'), 0))
+             FROM dc_new.bookings b WHERE b.offer_id = co.id) AS bookings
+     FROM dc_new.course_offers co JOIN dc_new.disciplines d ON d.id = co.discipline_id
+     JOIN dc_new.programs p ON p.id = co.program_id JOIN dc_new.faculties f ON f.id = p.faculty_id
+     WHERE co.teacher_id = $1 ORDER BY co.id`, [Number(request.params.id)]);
+  return rows.map((r: Record<string, any>) => ({ ...r, id: Number(r.id), teacherId: Number(r.teacherId),
+    bookings: Object.fromEntries(Object.entries(r.bookings).map(([k, v]) => [k, Number(v)])) }));
+});
+
+/** Создать предложение для преподавателя (программа и факультет создаются по названию, как в форме преподавателя). */
+app.post<{ Body: DcOfferBody }>("/api/dc/service/offers", { preHandler: [requireDcService] }, async (request, reply) => {
+  const b = request.body ?? {};
+  const modules = [...new Set((b.modules ?? []).map(Number))].filter((m) => m >= 1 && m <= 4);
+  if (!b.teacherId || !b.subject || !b.facultyName?.trim() || !b.programName?.trim() || !b.totalGroups || b.totalGroups < 1 || !modules.length) {
+    return reply.code(400).send({ error: "Нужны преподаватель, предмет, программа, модули и число групп" });
+  }
+  const client = await app.pg.connect();
+  try {
+    await client.query("BEGIN");
+    const teacher = await client.query("SELECT 1 FROM dc_new.users WHERE id = $1 AND role = 'teacher'", [b.teacherId]);
+    const subject = await client.query("SELECT id FROM dc_new.disciplines WHERE name = $1", [b.subject]);
+    if (!teacher.rows.length || !subject.rows.length) {
+      await client.query("ROLLBACK");
+      return reply.code(404).send({ error: !teacher.rows.length ? "Аккаунт преподавателя в TA-DC не найден" : "Такого предмета в TA-DC нет",
+        code: !teacher.rows.length ? "teacher_not_found" : "subject_not_found" });
+    }
+    const faculty = await client.query(
+      `INSERT INTO dc_new.faculties (name) VALUES ($1) ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id`,
+      [normalizeName(b.facultyName)]);
+    const program = await client.query(
+      `INSERT INTO dc_new.programs (faculty_id, name) VALUES ($1, $2)
+       ON CONFLICT (faculty_id, name) DO UPDATE SET name = EXCLUDED.name RETURNING id`,
+      [faculty.rows[0].id, normalizeName(b.programName)]);
+    const offer = await client.query(
+      `INSERT INTO dc_new.course_offers (teacher_id, discipline_id, program_id, total_groups) VALUES ($1, $2, $3, $4) RETURNING id`,
+      [b.teacherId, subject.rows[0].id, program.rows[0].id, b.totalGroups]);
+    for (const m of modules) {
+      await client.query(
+        `INSERT INTO dc_new.course_offer_modules (offer_id, module_id) SELECT $1, id FROM dc_new.modules WHERE number = $2`,
+        [offer.rows[0].id, m]);
+    }
+    await client.query("COMMIT");
+    app.log.info({ offerId: offer.rows[0].id, teacherId: b.teacherId }, "course offer created by DC");
+    return reply.code(201).send({ id: Number(offer.rows[0].id) });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+});
+
+/** Изменить число групп / модули или убрать предложение в архив (только если на нём нет броней). */
+app.post<{ Params: { id: string }; Body: DcOfferBody }>("/api/dc/service/offers/:id", { preHandler: [requireDcService] }, async (request, reply) => {
+  const id = Number(request.params.id);
+  const b = request.body ?? {};
+  const { rows } = await app.pg.query(
+    `SELECT co.id, coalesce((SELECT sum(num_groups) FROM dc_new.bookings WHERE offer_id = co.id AND status <> 'cancelled'), 0)::int AS booked
+     FROM dc_new.course_offers co WHERE co.id = $1`, [id]);
+  if (!rows[0]) return reply.code(404).send({ error: "Предложение в TA-DC не найдено", code: "offer_not_found" });
+  const booked = rows[0].booked as number;
+  if (b.archive) {
+    if (booked > 0) return reply.code(409).send({ error: `На предложении есть брони (${booked} гр.) — оно останется в TA-DC`, code: "has_bookings" });
+    await app.pg.query("UPDATE dc_new.course_offers SET status = 'archived' WHERE id = $1", [id]);
+    return { ok: true };
+  }
+  if (b.totalGroups !== undefined) {
+    if (b.totalGroups < 1) return reply.code(400).send({ error: "Число групп должно быть больше нуля" });
+    if (b.totalGroups < booked) return reply.code(409).send({ error: `Ассистенты уже заняли ${booked} гр. — меньше групп сделать нельзя`, code: "below_booked" });
+    await app.pg.query("UPDATE dc_new.course_offers SET total_groups = $2 WHERE id = $1", [id, b.totalGroups]);
+  }
+  const modules = b.modules ? [...new Set(b.modules.map(Number))].filter((m) => m >= 1 && m <= 4) : null;
+  if (modules?.length) {
+    await app.pg.query("DELETE FROM dc_new.course_offer_modules WHERE offer_id = $1", [id]);
+    for (const m of modules) {
+      await app.pg.query("INSERT INTO dc_new.course_offer_modules (offer_id, module_id) SELECT $1, id FROM dc_new.modules WHERE number = $2", [id, m]);
+    }
+  }
+  return { ok: true };
+});
+
 // Вкладка «Реестр DC»: курсы и договоры преподавателя из реестра (запрашиваются у реестра по внутренней сети).
 app.get("/api/dc/registry", { preHandler: [app.authenticate] }, async (request, reply) => {
   const auth = request.user as { id: number; role: string };
