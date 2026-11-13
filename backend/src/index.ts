@@ -285,6 +285,51 @@ app.post<{ Body: { t?: string; password?: string } }>(
   }
 );
 
+// ФИО и логин преподавателя одинаковые в обоих сайтах: кто сохранил последним, тот и прав.
+// Реестр меняет карточку → присылает сюда; преподаватель меняет профиль здесь → сообщаем реестру.
+app.post<{ Body: { id?: number; lastName?: string; firstName?: string; middleName?: string | null; email?: string } }>(
+  "/api/dc/service/teacher-profile",
+  { preHandler: [requireDcService] },
+  async (request, reply) => {
+    const b = request.body ?? {};
+    const lastName = String(b.lastName ?? "").trim();
+    const firstName = String(b.firstName ?? "").trim();
+    const middleName = String(b.middleName ?? "").trim() || null;
+    const email = b.email === undefined ? null : String(b.email).trim().toLowerCase();
+    if (!lastName || !firstName || (email !== null && !email)) return reply.code(400).send({ error: "Нужны фамилия и имя" });
+    const { rows } = await app.pg.query("SELECT id FROM dc_new.users WHERE id = $1 AND role = 'teacher'", [b.id]);
+    // code: реестр отвязывает карточку только по этому ответу
+    if (!rows[0]) return reply.code(404).send({ error: "Аккаунт преподавателя в TA-DC не найден", code: "teacher_not_found" });
+    if (email !== null) {
+      const taken = await app.pg.query("SELECT 1 FROM dc_new.users WHERE lower(email) = $1 AND id <> $2", [email, b.id]);
+      if (taken.rows.length) return reply.code(409).send({ error: "Эта почта уже занята в TA-DC другим пользователем" });
+    }
+    await app.pg.query(
+      `UPDATE dc_new.users SET last_name = $2, first_name = $3, middle_name = $4, email = coalesce($5, email) WHERE id = $1`,
+      [b.id, lastName, firstName, middleName, email],
+    );
+    return { ok: true };
+  }
+);
+
+/** Преподаватель изменил ФИО или логин в профиле — та же правка в карточке реестра. Ошибка не мешает сохранению здесь. */
+async function tellDcAboutProfile(p: { taDcId: number; lastName: string; firstName: string; middleName: string | null; email: string }) {
+  const secret = process.env.DC_HANDOFF_SECRET;
+  if (!secret) return;
+  const path = "/api/service/teacher-profile";
+  try {
+    const res = await fetch(`${DC_API_URL}${path}`, {
+      method: "POST",
+      headers: { "x-dc-service": serviceSignature(secret, "POST", path), "Content-Type": "application/json" },
+      body: JSON.stringify(p),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok && res.status !== 404) app.log.warn({ status: res.status, taDcId: p.taDcId }, "DC registry did not take the profile change");
+  } catch (error) {
+    app.log.warn({ taDcId: p.taDcId, error: String(error) }, "DC registry unreachable for a profile change");
+  }
+}
+
 // Вкладка «Реестр DC»: курсы и договоры преподавателя из реестра (запрашиваются у реестра по внутренней сети).
 app.get("/api/dc/registry", { preHandler: [app.authenticate] }, async (request, reply) => {
   const auth = request.user as { id: number; role: string };
@@ -641,6 +686,13 @@ app.put<{
            WHERE id = $5`,
           [firstName, lastName, middleName ?? null, email, authUser.id]
         );
+      }
+
+      if (authUser.role === "teacher") {
+        await tellDcAboutProfile({
+          taDcId: Number(authUser.id), lastName: lastName.trim(), firstName: firstName.trim(),
+          middleName: middleName?.trim() || null, email: email.trim(),
+        });
       }
 
       let questionnaireCompleted: boolean | null = null;
