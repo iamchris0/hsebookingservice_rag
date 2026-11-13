@@ -1,4 +1,4 @@
-import Fastify from "fastify";
+import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
@@ -6,7 +6,7 @@ import jwt from "@fastify/jwt";
 import postgres from "@fastify/postgres";
 import dotenv from "dotenv";
 import bcrypt from "bcrypt";
-import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 
 dotenv.config();
 
@@ -151,36 +151,158 @@ app.get(
   }
 );
 
-// ─── Вход в реестр DC (admin.tadc-hse.ru) ─────────────────────────────────────
-// Одноразовая ссылка для преподавателя: живёт 2 минуты, подписана отдельным секретом DC_HANDOFF_SECRET
-// (тот же секрет у реестра DC как TA_DC_HANDOFF_SECRET). JWT-секрет TA-DC реестру не передаётся.
+// ─── Связь с реестром DC (admin.tadc-hse.ru) ──────────────────────────────────
+// Пароль преподавателя хранится только здесь. Реестр DC — инструмент команды: он создаёт аккаунты преподавателей,
+// выдаёт ссылки для установки пароля и показывает преподавателю его курсы и договоры (вкладка «Реестр DC»).
+// Сервера обращаются друг к другу по внутренней сети Docker; запросы подписаны общим секретом DC_HANDOFF_SECRET:
+// заголовок x-dc-service: <время>.<HMAC-SHA256(секрет, "service.<время>.<МЕТОД> <путь>")>, живёт минуту.
 
-app.post(
-  "/api/dc/handoff",
-  { preHandler: [app.authenticate], config: { rateLimit: { max: 20, timeWindow: "1 minute" } } },
+const DC_API_URL = (process.env.DC_API_URL || "http://dc-app:4000").replace(/\/$/, "");
+const SET_PASSWORD_DAYS = 7;
+
+function hmac(secret: string, text: string) {
+  return createHmac("sha256", secret).update(text).digest("base64url");
+}
+function sameText(a: string, b: string) {
+  const x = Buffer.from(a);
+  const y = Buffer.from(b);
+  return x.length === y.length && timingSafeEqual(x, y);
+}
+function serviceSignature(secret: string, method: string, path: string, now = Math.floor(Date.now() / 1000)) {
+  return `${now}.${hmac(secret, `service.${now}.${method.toUpperCase()} ${path}`)}`;
+}
+/** preHandler: запрос пришёл от сервера реестра DC. */
+async function requireDcService(request: FastifyRequest, reply: FastifyReply) {
+  const secret = process.env.DC_HANDOFF_SECRET;
+  const [ts, mac] = String(request.headers["x-dc-service"] ?? "").split(".");
+  const t = Number(ts);
+  const now = Math.floor(Date.now() / 1000);
+  if (!secret || !ts || !mac || !Number.isInteger(t) || Math.abs(now - t) > 60
+    || !sameText(serviceSignature(secret, request.method, request.url, t).split(".")[1] ?? "", mac)) {
+    return reply.code(401).send({ error: "Неверная подпись запроса" });
+  }
+}
+/** Отпечаток текущего пароля: после смены пароля старая ссылка перестаёт работать. */
+const passwordPrint = (hash: string) => createHash("sha256").update(hash).digest("base64url").slice(0, 16);
+
+// Реестр создаёт аккаунт преподавателя (без пароля — его задаст сам преподаватель по ссылке).
+// Если аккаунт с этой почтой уже есть у преподавателя — возвращает его.
+app.post<{ Body: { email?: string; firstName?: string; lastName?: string; middleName?: string | null } }>(
+  "/api/dc/service/teachers",
+  { preHandler: [requireDcService] },
   async (request, reply) => {
-    const secret = process.env.DC_HANDOFF_SECRET;
-    if (!secret) return reply.code(404).send({ error: "Вход в реестр DC не настроен" });
-    const auth = request.user as { id: number; role: string };
-    if (auth.role !== "teacher") return reply.code(403).send({ error: "Реестр DC доступен преподавателям" });
+    const email = String(request.body?.email ?? "").trim().toLowerCase();
+    const firstName = String(request.body?.firstName ?? "").trim();
+    const lastName = String(request.body?.lastName ?? "").trim();
+    const middleName = String(request.body?.middleName ?? "").trim() || null;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !firstName || !lastName) {
+      return reply.code(400).send({ error: "Нужны почта, фамилия и имя" });
+    }
+    const existing = await app.pg.query("SELECT id, role FROM dc_new.users WHERE lower(email) = $1", [email]);
+    if (existing.rows[0]) {
+      if (existing.rows[0].role !== "teacher") return reply.code(409).send({ error: "С этой почтой в TA-DC зарегистрирован студент" });
+      return { id: Number(existing.rows[0].id), existed: true };
+    }
+    const unusable = await bcrypt.hash(randomUUID() + randomUUID(), 10);
     const { rows } = await app.pg.query(
-      "SELECT id, email, last_name, first_name, middle_name FROM dc_new.users WHERE id = $1 AND role = 'teacher'",
-      [auth.id],
+      `INSERT INTO dc_new.users (email, password_hash, first_name, last_name, middle_name, role)
+       VALUES ($1, $2, $3, $4, $5, 'teacher') RETURNING id`,
+      [email, unusable, firstName, lastName, middleName],
     );
-    const u = rows[0];
-    if (!u) return reply.code(401).send({ error: "Unauthorized" });
-    const now = Math.floor(Date.now() / 1000);
-    const payload = {
-      v: 1, sub: Number(u.id), role: "teacher", email: u.email ?? "",
-      lastName: u.last_name ?? "", firstName: u.first_name ?? "", middleName: u.middle_name ?? null,
-      iat: now, exp: now + 120, jti: randomUUID(),
-    };
-    const data = Buffer.from(JSON.stringify(payload)).toString("base64url");
-    const mac = createHmac("sha256", secret).update(data).digest("base64url");
-    const base = (process.env.DC_URL || "https://admin.tadc-hse.ru").replace(/\/$/, "");
-    return { url: `${base}/api/auth/ta-dc?t=${data}.${mac}` };
+    app.log.info({ userId: rows[0].id }, "teacher account created by DC");
+    return reply.code(201).send({ id: Number(rows[0].id), existed: false });
   }
 );
+
+// Реестр просит ссылку для установки пароля (приглашение или «забыл пароль»): 7 дней, срабатывает один раз.
+app.post<{ Body: { userId?: number } }>(
+  "/api/dc/service/password-link",
+  { preHandler: [requireDcService] },
+  async (request, reply) => {
+    const secret = process.env.DC_HANDOFF_SECRET!;
+    const { rows } = await app.pg.query("SELECT id, password_hash FROM dc_new.users WHERE id = $1 AND role = 'teacher'", [request.body?.userId]);
+    if (!rows[0]) return reply.code(404).send({ error: "Аккаунт преподавателя в TA-DC не найден" });
+    const now = Math.floor(Date.now() / 1000);
+    const data = Buffer.from(JSON.stringify({
+      v: 1, aud: "set-password", sub: Number(rows[0].id), exp: now + SET_PASSWORD_DAYS * 86400, fp: passwordPrint(rows[0].password_hash),
+    })).toString("base64url");
+    return { token: `${data}.${hmac(secret, `set-password.${data}`)}`, expiresAt: new Date((now + SET_PASSWORD_DAYS * 86400) * 1000).toISOString() };
+  }
+);
+
+// Страница /set-password: проверить ссылку (GET — кому она) и задать пароль (POST — сразу с входом).
+function readSetPasswordLink(t: string) {
+  const secret = process.env.DC_HANDOFF_SECRET;
+  const [data, mac, extra] = t.split(".");
+  if (!secret || !data || !mac || extra !== undefined || !sameText(hmac(secret, `set-password.${data}`), mac)) return null;
+  try {
+    const p = JSON.parse(Buffer.from(data, "base64url").toString("utf8"));
+    if (p.v !== 1 || p.aud !== "set-password" || typeof p.sub !== "number" || typeof p.fp !== "string") return null;
+    if (typeof p.exp !== "number" || p.exp < Math.floor(Date.now() / 1000)) return null;
+    return p as { sub: number; fp: string };
+  } catch {
+    return null;
+  }
+}
+const LINK_DEAD = "Ссылка устарела или уже использована. Попросите команду Data Culture прислать новую.";
+
+app.get<{ Querystring: { t?: string } }>("/api/set-password", async (request, reply) => {
+  const p = readSetPasswordLink(String(request.query.t ?? ""));
+  const u = p && (await app.pg.query("SELECT email, first_name, last_name, password_hash FROM dc_new.users WHERE id = $1 AND role = 'teacher'", [p.sub])).rows[0];
+  if (!p || !u || passwordPrint(u.password_hash) !== p.fp) return reply.code(410).send({ error: LINK_DEAD });
+  return { email: u.email, firstName: u.first_name, lastName: u.last_name };
+});
+
+app.post<{ Body: { t?: string; password?: string } }>(
+  "/api/set-password",
+  { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },
+  async (request, reply) => {
+    const password = String(request.body?.password ?? "");
+    if (password.length < 8) return reply.code(400).send({ error: "Пароль — не короче 8 символов" });
+    const p = readSetPasswordLink(String(request.body?.t ?? ""));
+    if (!p) return reply.code(410).send({ error: LINK_DEAD });
+    const hash = await bcrypt.hash(password, 10);
+    const client = await app.pg.connect();
+    try {
+      await client.query("BEGIN");
+      const { rows } = await client.query(
+        "SELECT id, email, role, first_name, last_name, password_hash FROM dc_new.users WHERE id = $1 AND role = 'teacher' FOR UPDATE", [p.sub]);
+      const u = rows[0];
+      if (!u || passwordPrint(u.password_hash) !== p.fp) {
+        await client.query("ROLLBACK");
+        return reply.code(410).send({ error: LINK_DEAD });
+      }
+      await client.query("UPDATE dc_new.users SET password_hash = $2 WHERE id = $1", [u.id, hash]);
+      await client.query("COMMIT");
+      const token = app.jwt.sign({ id: u.id, email: u.email, role: u.role });
+      return { token, user: { id: u.id, email: u.email, role: u.role, firstName: u.first_name, lastName: u.last_name, questionnaireCompleted: null } };
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+);
+
+// Вкладка «Реестр DC»: курсы и договоры преподавателя из реестра (запрашиваются у реестра по внутренней сети).
+app.get("/api/dc/registry", { preHandler: [app.authenticate] }, async (request, reply) => {
+  const auth = request.user as { id: number; role: string };
+  if (auth.role !== "teacher") return reply.code(403).send({ error: "Раздел для преподавателей" });
+  const secret = process.env.DC_HANDOFF_SECRET;
+  if (!secret) return reply.code(503).send({ error: "Связь с реестром DC не настроена" });
+  const path = `/api/service/teacher?taDcId=${Number(auth.id)}`;
+  try {
+    const res = await fetch(`${DC_API_URL}${path}`, {
+      headers: { "x-dc-service": serviceSignature(secret, "GET", path) },
+      signal: AbortSignal.timeout(10_000),
+    });
+    const data = await res.json().catch(() => null);
+    return reply.code(res.status).send(data ?? { error: "Реестр DC не ответил" });
+  } catch {
+    return reply.code(502).send({ error: "Реестр DC сейчас недоступен" });
+  }
+});
 
 // Обратное направление: из реестра DC в TA-DC без повторного входа. Реестр подписывает ссылку тем же секретом,
 // но с приставкой "dc-to-ta-dc." — ссылку для одного сайта нельзя использовать на другом.
