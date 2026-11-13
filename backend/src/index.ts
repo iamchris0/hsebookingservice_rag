@@ -418,9 +418,14 @@ app.post<{ Params: { id: string }; Body: DcOfferBody }>("/api/dc/service/offers/
   if (!rows[0]) return reply.code(404).send({ error: "Предложение в TA-DC не найдено", code: "offer_not_found" });
   const booked = rows[0].booked as number;
   if (b.archive) {
-    if (booked > 0) return reply.code(409).send({ error: `На предложении есть брони (${booked} гр.) — оно останется в TA-DC`, code: "has_bookings" });
-    await app.pg.query("UPDATE dc_new.course_offers SET status = 'archived' WHERE id = $1", [id]);
-    return { ok: true };
+    // как «Удалить курс» у преподавателя: без броней — в архив; с бронями убираются только свободные группы,
+    // а занятые остаются с ассистентами
+    if (booked > 0) {
+      await app.pg.query("UPDATE dc_new.course_offers SET total_groups = $2, updated_at = now() WHERE id = $1 AND total_groups > $2", [id, booked]);
+      return { ok: true, archived: false, bookedGroups: booked };
+    }
+    await app.pg.query("UPDATE dc_new.course_offers SET status = 'archived', updated_at = now() WHERE id = $1", [id]);
+    return { ok: true, archived: true, bookedGroups: 0 };
   }
   if (b.totalGroups !== undefined) {
     if (b.totalGroups < 1) return reply.code(400).send({ error: "Число групп должно быть больше нуля" });
