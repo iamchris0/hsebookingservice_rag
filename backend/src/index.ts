@@ -6,7 +6,7 @@ import jwt from "@fastify/jwt";
 import postgres from "@fastify/postgres";
 import dotenv from "dotenv";
 import bcrypt from "bcrypt";
-import { createHmac, randomUUID } from "node:crypto";
+import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 
 dotenv.config();
 
@@ -179,6 +179,52 @@ app.post(
     const mac = createHmac("sha256", secret).update(data).digest("base64url");
     const base = (process.env.DC_URL || "https://admin.tadc-hse.ru").replace(/\/$/, "");
     return { url: `${base}/api/auth/ta-dc?t=${data}.${mac}` };
+  }
+);
+
+// Обратное направление: из реестра DC в TA-DC без повторного входа. Реестр подписывает ссылку тем же секретом,
+// но с приставкой "dc-to-ta-dc." — ссылку для одного сайта нельзя использовать на другом.
+// Каждая ссылка срабатывает один раз (использованные помним до истечения их срока; бэкенд один).
+const usedDcLinks = new Map<string, number>();
+
+app.post<{ Body: { t?: string } }>(
+  "/api/dc/login",
+  { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } },
+  async (request, reply) => {
+    const secret = process.env.DC_HANDOFF_SECRET;
+    const bad = (error: string) => reply.code(401).send({ error });
+    if (!secret) return bad("Вход из реестра DC не настроен");
+    const [data, mac, extra] = String(request.body?.t ?? "").split(".");
+    if (!data || !mac || extra !== undefined) return bad("Ссылка не подошла");
+    const expected = Buffer.from(createHmac("sha256", secret).update(`dc-to-ta-dc.${data}`).digest("base64url"));
+    const given = Buffer.from(mac);
+    if (expected.length !== given.length || !timingSafeEqual(expected, given)) return bad("Ссылка не подошла");
+    let p: { v?: number; aud?: string; sub?: number; iat?: number; exp?: number; jti?: string };
+    try {
+      p = JSON.parse(Buffer.from(data, "base64url").toString("utf8"));
+    } catch {
+      return bad("Ссылка не подошла");
+    }
+    const now = Math.floor(Date.now() / 1000);
+    if (p.v !== 1 || p.aud !== "ta-dc" || typeof p.sub !== "number" || typeof p.jti !== "string"
+      || typeof p.exp !== "number" || typeof p.iat !== "number" || p.exp < now || p.exp - p.iat > 120) {
+      return bad("Ссылка устарела — откройте TA-DC из реестра ещё раз");
+    }
+    for (const [jti, exp] of usedDcLinks) if (exp < now) usedDcLinks.delete(jti);
+    if (usedDcLinks.has(p.jti)) return bad("Ссылка уже использована — откройте TA-DC из реестра ещё раз");
+    usedDcLinks.set(p.jti, p.exp);
+
+    const { rows } = await app.pg.query(
+      "SELECT id, email, role, first_name, last_name FROM dc_new.users WHERE id = $1 AND role = 'teacher'",
+      [p.sub],
+    );
+    const u = rows[0];
+    if (!u) return bad("Аккаунт преподавателя в TA-DC не найден");
+    const token = app.jwt.sign({ id: u.id, email: u.email, role: u.role });
+    return {
+      token,
+      user: { id: u.id, email: u.email, role: u.role, firstName: u.first_name, lastName: u.last_name, questionnaireCompleted: null },
+    };
   }
 );
 
