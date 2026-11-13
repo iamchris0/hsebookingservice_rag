@@ -6,6 +6,7 @@ import jwt from "@fastify/jwt";
 import postgres from "@fastify/postgres";
 import dotenv from "dotenv";
 import bcrypt from "bcrypt";
+import { createHmac, randomUUID } from "node:crypto";
 
 dotenv.config();
 
@@ -147,6 +148,37 @@ app.get(
       message: "This is a protected route",
       user: request.user,
     };
+  }
+);
+
+// ─── Вход в реестр DC (admin.tadc-hse.ru) ─────────────────────────────────────
+// Одноразовая ссылка для преподавателя: живёт 2 минуты, подписана отдельным секретом DC_HANDOFF_SECRET
+// (тот же секрет у реестра DC как TA_DC_HANDOFF_SECRET). JWT-секрет TA-DC реестру не передаётся.
+
+app.post(
+  "/api/dc/handoff",
+  { preHandler: [app.authenticate], config: { rateLimit: { max: 20, timeWindow: "1 minute" } } },
+  async (request, reply) => {
+    const secret = process.env.DC_HANDOFF_SECRET;
+    if (!secret) return reply.code(404).send({ error: "Вход в реестр DC не настроен" });
+    const auth = request.user as { id: number; role: string };
+    if (auth.role !== "teacher") return reply.code(403).send({ error: "Реестр DC доступен преподавателям" });
+    const { rows } = await app.pg.query(
+      "SELECT id, email, last_name, first_name, middle_name FROM dc_new.users WHERE id = $1 AND role = 'teacher'",
+      [auth.id],
+    );
+    const u = rows[0];
+    if (!u) return reply.code(401).send({ error: "Unauthorized" });
+    const now = Math.floor(Date.now() / 1000);
+    const payload = {
+      v: 1, sub: Number(u.id), role: "teacher", email: u.email ?? "",
+      lastName: u.last_name ?? "", firstName: u.first_name ?? "", middleName: u.middle_name ?? null,
+      iat: now, exp: now + 120, jti: randomUUID(),
+    };
+    const data = Buffer.from(JSON.stringify(payload)).toString("base64url");
+    const mac = createHmac("sha256", secret).update(data).digest("base64url");
+    const base = (process.env.DC_URL || "https://admin.tadc-hse.ru").replace(/\/$/, "");
+    return { url: `${base}/api/auth/ta-dc?t=${data}.${mac}` };
   }
 );
 

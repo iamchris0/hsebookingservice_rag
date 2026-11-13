@@ -52,6 +52,9 @@ services:
       DB_PASSWORD: ${POSTGRES_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       STAFF_SECRET: ${STAFF_SECRET}
+      # Вход в реестр DC (admin.tadc-hse.ru) по одноразовой ссылке; пусто — кнопка «Реестр DC» не работает
+      DC_HANDOFF_SECRET: ${DC_HANDOFF_SECRET:-}
+      DC_URL: ${DC_URL:-https://admin.tadc-hse.ru}
       CORS_ORIGIN: https://${SITE_DOMAIN}
     depends_on:
       postgres:

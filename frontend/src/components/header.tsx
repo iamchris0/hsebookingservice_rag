@@ -3,9 +3,9 @@
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { User, LogOut } from "lucide-react"
+import { User, LogOut, ExternalLink } from "lucide-react"
 import Image from "next/image"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 // URL бэкенда - можно задать через переменную окружения NEXT_PUBLIC_BACKEND_URL
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
@@ -13,6 +13,37 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:300
 export function Header() {
   const router = useRouter();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  // Кнопка «Реестр DC» — только для преподавателей (роль из сохранённого при входе пользователя)
+  const [isTeacher, setIsTeacher] = useState(false);
+  const [openingDc, setOpeningDc] = useState(false);
+  useEffect(() => {
+    try {
+      setIsTeacher(JSON.parse(localStorage.getItem('user') || 'null')?.role === 'teacher');
+    } catch {
+      setIsTeacher(false);
+    }
+  }, []);
+
+  // Получаем одноразовую ссылку и открываем реестр DC в новой вкладке уже с выполненным входом
+  const openDcRegistry = async () => {
+    const tab = window.open('', '_blank');
+    setOpeningDc(true);
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/dc/handoff`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token') ?? ''}` },
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.url) throw new Error(data?.error || 'Не удалось открыть реестр DC');
+      if (tab) tab.location.href = data.url;
+      else window.location.href = data.url;
+    } catch (error) {
+      tab?.close();
+      alert(error instanceof Error ? error.message : 'Не удалось открыть реестр DC');
+    } finally {
+      setOpeningDc(false);
+    }
+  };
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -64,6 +95,19 @@ export function Header() {
           </div>
         </Link>
         <div className="flex gap-3">
+          {isTeacher && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="bg-black hover:bg-black/80 text-white disabled:opacity-50"
+              onClick={openDcRegistry}
+              disabled={openingDc}
+              title="Мои курсы и данные в реестре Data Culture"
+            >
+              <ExternalLink className="w-4 h-4 mr-2" />
+              Реестр DC
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="sm"

@@ -16,6 +16,12 @@
 	}
 }
 
+# Реестр Data Culture (отдельный проект /root/hse_dc, контейнер dc-app в сети deploy_default)
+admin.tadc-hse.ru {
+	encode zstd gzip
+	reverse_proxy dc-app:4000
+}
+
 # Старые и альтернативные адреса (www, временный sslip.io) -> основной домен.
 {$REDIRECT_DOMAINS} {
 	redir https://{$SITE_DOMAIN}{uri} permanent
