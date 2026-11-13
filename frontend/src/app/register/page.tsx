@@ -138,7 +138,7 @@ export default function Register() {
             type="text"
             value={email}
             onChange={(e) => { setEmail(e.target.value); setError(''); }}
-            placeholder="Login"
+            placeholder="Почта — она будет логином"
             className="w-full px-5 py-4 text-base outline-none transition-all"
             style={inputStyle}
             onFocus={focusStyle}

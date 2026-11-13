@@ -44,6 +44,17 @@ export function TeacherNav() {
           >
             Аналитика
           </Link>
+          <Link
+            href="/teacher/registry"
+            className={cn(
+              "px-6 py-4 text-sm font-medium transition-colors border-b-2",
+              pathname === "/teacher/registry"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground",
+            )}
+          >
+            Реестр DC
+          </Link>
         </div>
       </div>
     </nav>

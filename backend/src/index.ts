@@ -1,4 +1,4 @@
-import Fastify from "fastify";
+import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
@@ -6,6 +6,7 @@ import jwt from "@fastify/jwt";
 import postgres from "@fastify/postgres";
 import dotenv from "dotenv";
 import bcrypt from "bcrypt";
+import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 
 dotenv.config();
 
@@ -146,6 +147,362 @@ app.get(
     return {
       message: "This is a protected route",
       user: request.user,
+    };
+  }
+);
+
+// ─── Связь с реестром DC (admin.tadc-hse.ru) ──────────────────────────────────
+// Пароль преподавателя хранится только здесь. Реестр DC — инструмент команды: он создаёт аккаунты преподавателей,
+// выдаёт ссылки для установки пароля и показывает преподавателю его курсы и договоры (вкладка «Реестр DC»).
+// Сервера обращаются друг к другу по внутренней сети Docker; запросы подписаны общим секретом DC_HANDOFF_SECRET:
+// заголовок x-dc-service: <время>.<HMAC-SHA256(секрет, "service.<время>.<МЕТОД> <путь>")>, живёт минуту.
+
+const DC_API_URL = (process.env.DC_API_URL || "http://dc-app:4000").replace(/\/$/, "");
+const SET_PASSWORD_DAYS = 7;
+
+function hmac(secret: string, text: string) {
+  return createHmac("sha256", secret).update(text).digest("base64url");
+}
+function sameText(a: string, b: string) {
+  const x = Buffer.from(a);
+  const y = Buffer.from(b);
+  return x.length === y.length && timingSafeEqual(x, y);
+}
+function serviceSignature(secret: string, method: string, path: string, now = Math.floor(Date.now() / 1000)) {
+  return `${now}.${hmac(secret, `service.${now}.${method.toUpperCase()} ${path}`)}`;
+}
+/** preHandler: запрос пришёл от сервера реестра DC. */
+async function requireDcService(request: FastifyRequest, reply: FastifyReply) {
+  const secret = process.env.DC_HANDOFF_SECRET;
+  const [ts, mac] = String(request.headers["x-dc-service"] ?? "").split(".");
+  const t = Number(ts);
+  const now = Math.floor(Date.now() / 1000);
+  if (!secret || !ts || !mac || !Number.isInteger(t) || Math.abs(now - t) > 60
+    || !sameText(serviceSignature(secret, request.method, request.url, t).split(".")[1] ?? "", mac)) {
+    return reply.code(401).send({ error: "Неверная подпись запроса" });
+  }
+}
+/** Отпечаток текущего пароля: после смены пароля старая ссылка перестаёт работать. */
+const passwordPrint = (hash: string) => createHash("sha256").update(hash).digest("base64url").slice(0, 16);
+
+// Реестр создаёт аккаунт преподавателя (без пароля — его задаст сам преподаватель по ссылке).
+// Если аккаунт с этой почтой уже есть у преподавателя — возвращает его.
+app.post<{ Body: { email?: string; firstName?: string; lastName?: string; middleName?: string | null } }>(
+  "/api/dc/service/teachers",
+  { preHandler: [requireDcService] },
+  async (request, reply) => {
+    const email = String(request.body?.email ?? "").trim().toLowerCase();
+    const firstName = String(request.body?.firstName ?? "").trim();
+    const lastName = String(request.body?.lastName ?? "").trim();
+    const middleName = String(request.body?.middleName ?? "").trim() || null;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !firstName || !lastName) {
+      return reply.code(400).send({ error: "Нужны почта, фамилия и имя" });
+    }
+    const existing = await app.pg.query("SELECT id, role FROM dc_new.users WHERE lower(email) = $1", [email]);
+    if (existing.rows[0]) {
+      if (existing.rows[0].role !== "teacher") return reply.code(409).send({ error: "С этой почтой в TA-DC зарегистрирован студент" });
+      return { id: Number(existing.rows[0].id), existed: true };
+    }
+    const unusable = await bcrypt.hash(randomUUID() + randomUUID(), 10);
+    const { rows } = await app.pg.query(
+      `INSERT INTO dc_new.users (email, password_hash, first_name, last_name, middle_name, role)
+       VALUES ($1, $2, $3, $4, $5, 'teacher') RETURNING id`,
+      [email, unusable, firstName, lastName, middleName],
+    );
+    app.log.info({ userId: rows[0].id }, "teacher account created by DC");
+    return reply.code(201).send({ id: Number(rows[0].id), existed: false });
+  }
+);
+
+// Реестр просит ссылку для установки пароля (приглашение или «забыл пароль»): 7 дней, срабатывает один раз.
+app.post<{ Body: { userId?: number } }>(
+  "/api/dc/service/password-link",
+  { preHandler: [requireDcService] },
+  async (request, reply) => {
+    const secret = process.env.DC_HANDOFF_SECRET!;
+    const { rows } = await app.pg.query("SELECT id, password_hash FROM dc_new.users WHERE id = $1 AND role = 'teacher'", [request.body?.userId]);
+    if (!rows[0]) return reply.code(404).send({ error: "Аккаунт преподавателя в TA-DC не найден" });
+    const now = Math.floor(Date.now() / 1000);
+    const data = Buffer.from(JSON.stringify({
+      v: 1, aud: "set-password", sub: Number(rows[0].id), exp: now + SET_PASSWORD_DAYS * 86400, fp: passwordPrint(rows[0].password_hash),
+    })).toString("base64url");
+    return { token: `${data}.${hmac(secret, `set-password.${data}`)}`, expiresAt: new Date((now + SET_PASSWORD_DAYS * 86400) * 1000).toISOString() };
+  }
+);
+
+// Страница /set-password: проверить ссылку (GET — кому она) и задать пароль (POST — сразу с входом).
+function readSetPasswordLink(t: string) {
+  const secret = process.env.DC_HANDOFF_SECRET;
+  const [data, mac, extra] = t.split(".");
+  if (!secret || !data || !mac || extra !== undefined || !sameText(hmac(secret, `set-password.${data}`), mac)) return null;
+  try {
+    const p = JSON.parse(Buffer.from(data, "base64url").toString("utf8"));
+    if (p.v !== 1 || p.aud !== "set-password" || typeof p.sub !== "number" || typeof p.fp !== "string") return null;
+    if (typeof p.exp !== "number" || p.exp < Math.floor(Date.now() / 1000)) return null;
+    return p as { sub: number; fp: string };
+  } catch {
+    return null;
+  }
+}
+const LINK_DEAD = "Ссылка устарела или уже использована. Попросите команду Data Culture прислать новую.";
+
+app.get<{ Querystring: { t?: string } }>("/api/set-password", async (request, reply) => {
+  const p = readSetPasswordLink(String(request.query.t ?? ""));
+  const u = p && (await app.pg.query("SELECT email, first_name, last_name, password_hash FROM dc_new.users WHERE id = $1 AND role = 'teacher'", [p.sub])).rows[0];
+  if (!p || !u || passwordPrint(u.password_hash) !== p.fp) return reply.code(410).send({ error: LINK_DEAD });
+  return { email: u.email, firstName: u.first_name, lastName: u.last_name };
+});
+
+app.post<{ Body: { t?: string; password?: string } }>(
+  "/api/set-password",
+  { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },
+  async (request, reply) => {
+    const password = String(request.body?.password ?? "");
+    if (password.length < 8) return reply.code(400).send({ error: "Пароль — не короче 8 символов" });
+    const p = readSetPasswordLink(String(request.body?.t ?? ""));
+    if (!p) return reply.code(410).send({ error: LINK_DEAD });
+    const hash = await bcrypt.hash(password, 10);
+    const client = await app.pg.connect();
+    try {
+      await client.query("BEGIN");
+      const { rows } = await client.query(
+        "SELECT id, email, role, first_name, last_name, password_hash FROM dc_new.users WHERE id = $1 AND role = 'teacher' FOR UPDATE", [p.sub]);
+      const u = rows[0];
+      if (!u || passwordPrint(u.password_hash) !== p.fp) {
+        await client.query("ROLLBACK");
+        return reply.code(410).send({ error: LINK_DEAD });
+      }
+      await client.query("UPDATE dc_new.users SET password_hash = $2 WHERE id = $1", [u.id, hash]);
+      await client.query("COMMIT");
+      const token = app.jwt.sign({ id: u.id, email: u.email, role: u.role });
+      return { token, user: { id: u.id, email: u.email, role: u.role, firstName: u.first_name, lastName: u.last_name, questionnaireCompleted: null } };
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+);
+
+// ФИО и логин преподавателя одинаковые в обоих сайтах: кто сохранил последним, тот и прав.
+// Реестр меняет карточку → присылает сюда; преподаватель меняет профиль здесь → сообщаем реестру.
+app.post<{ Body: { id?: number; lastName?: string; firstName?: string; middleName?: string | null; email?: string } }>(
+  "/api/dc/service/teacher-profile",
+  { preHandler: [requireDcService] },
+  async (request, reply) => {
+    const b = request.body ?? {};
+    const lastName = String(b.lastName ?? "").trim();
+    const firstName = String(b.firstName ?? "").trim();
+    const middleName = String(b.middleName ?? "").trim() || null;
+    const email = b.email === undefined ? null : String(b.email).trim().toLowerCase();
+    if (!lastName || !firstName || (email !== null && !email)) return reply.code(400).send({ error: "Нужны фамилия и имя" });
+    const { rows } = await app.pg.query("SELECT id FROM dc_new.users WHERE id = $1 AND role = 'teacher'", [b.id]);
+    // code: реестр отвязывает карточку только по этому ответу
+    if (!rows[0]) return reply.code(404).send({ error: "Аккаунт преподавателя в TA-DC не найден", code: "teacher_not_found" });
+    if (email !== null) {
+      const taken = await app.pg.query("SELECT 1 FROM dc_new.users WHERE lower(email) = $1 AND id <> $2", [email, b.id]);
+      if (taken.rows.length) return reply.code(409).send({ error: "Эта почта уже занята в TA-DC другим пользователем" });
+    }
+    await app.pg.query(
+      `UPDATE dc_new.users SET last_name = $2, first_name = $3, middle_name = $4, email = coalesce($5, email) WHERE id = $1`,
+      [b.id, lastName, firstName, middleName, email],
+    );
+    return { ok: true };
+  }
+);
+
+/** Преподаватель изменил ФИО или логин в профиле — та же правка в карточке реестра. Ошибка не мешает сохранению здесь. */
+async function tellDcAboutProfile(p: { taDcId: number; lastName: string; firstName: string; middleName: string | null; email: string }) {
+  const secret = process.env.DC_HANDOFF_SECRET;
+  if (!secret) return;
+  const path = "/api/service/teacher-profile";
+  try {
+    const res = await fetch(`${DC_API_URL}${path}`, {
+      method: "POST",
+      headers: { "x-dc-service": serviceSignature(secret, "POST", path), "Content-Type": "application/json" },
+      body: JSON.stringify(p),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok && res.status !== 404) app.log.warn({ status: res.status, taDcId: p.taDcId }, "DC registry did not take the profile change");
+  } catch (error) {
+    app.log.warn({ taDcId: p.taDcId, error: String(error) }, "DC registry unreachable for a profile change");
+  }
+}
+
+// Предложения курсов из реестра DC: менеджер назначил преподавателя на курс — у преподавателя появляется
+// предложение (группы без ассистентов). Реестр сам находит уже созданные преподавателем предложения, чтобы не было дублей.
+type DcOfferBody = {
+  teacherId?: number; subject?: string; facultyName?: string; programName?: string;
+  totalGroups?: number; modules?: number[]; archive?: boolean;
+};
+
+/** Справочники для реестра: программы с факультетами и предметы. */
+app.get("/api/dc/service/catalog", { preHandler: [requireDcService] }, async () => {
+  const programs = await app.pg.query(
+    `SELECT p.name AS program, f.name AS faculty FROM dc_new.programs p JOIN dc_new.faculties f ON f.id = p.faculty_id ORDER BY 2, 1`);
+  const subjects = await app.pg.query("SELECT name FROM dc_new.disciplines ORDER BY name");
+  return { programs: programs.rows, subjects: subjects.rows.map((r: { name: string }) => r.name) };
+});
+
+/** Предложения преподавателя с бронями — чтобы реестр связал уже существующее, а не создал второе. */
+app.get<{ Params: { id: string } }>("/api/dc/service/teachers/:id/offers", { preHandler: [requireDcService] }, async (request) => {
+  const { rows } = await app.pg.query(
+    `SELECT co.id, co.teacher_id AS "teacherId", d.name AS discipline, p.name AS program, f.name AS faculty,
+            co.total_groups AS groups, co.status, co.created_at AS "createdAt",
+            coalesce((SELECT json_agg(m.number ORDER BY m.number) FROM dc_new.course_offer_modules om
+                      JOIN dc_new.modules m ON m.id = om.module_id WHERE om.offer_id = co.id), '[]') AS modules,
+            (SELECT json_build_object(
+               'active', count(*) FILTER (WHERE b.status = 'active'), 'pending', count(*) FILTER (WHERE b.status = 'pending'),
+               'money', count(*) FILTER (WHERE b.status <> 'cancelled' AND b.payment_type = 'money'),
+               'credits', count(*) FILTER (WHERE b.status <> 'cancelled' AND b.payment_type = 'credits'),
+               'groups', coalesce(sum(b.num_groups) FILTER (WHERE b.status <> 'cancelled'), 0))
+             FROM dc_new.bookings b WHERE b.offer_id = co.id) AS bookings
+     FROM dc_new.course_offers co JOIN dc_new.disciplines d ON d.id = co.discipline_id
+     JOIN dc_new.programs p ON p.id = co.program_id JOIN dc_new.faculties f ON f.id = p.faculty_id
+     WHERE co.teacher_id = $1 ORDER BY co.id`, [Number(request.params.id)]);
+  return rows.map((r: Record<string, any>) => ({ ...r, id: Number(r.id), teacherId: Number(r.teacherId),
+    bookings: Object.fromEntries(Object.entries(r.bookings).map(([k, v]) => [k, Number(v)])) }));
+});
+
+/** Создать предложение для преподавателя (программа и факультет создаются по названию, как в форме преподавателя). */
+app.post<{ Body: DcOfferBody }>("/api/dc/service/offers", { preHandler: [requireDcService] }, async (request, reply) => {
+  const b = request.body ?? {};
+  const modules = [...new Set((b.modules ?? []).map(Number))].filter((m) => m >= 1 && m <= 4);
+  if (!b.teacherId || !b.subject || !b.facultyName?.trim() || !b.programName?.trim() || !b.totalGroups || b.totalGroups < 1 || !modules.length) {
+    return reply.code(400).send({ error: "Нужны преподаватель, предмет, программа, модули и число групп" });
+  }
+  const client = await app.pg.connect();
+  try {
+    await client.query("BEGIN");
+    const teacher = await client.query("SELECT 1 FROM dc_new.users WHERE id = $1 AND role = 'teacher'", [b.teacherId]);
+    const subject = await client.query("SELECT id FROM dc_new.disciplines WHERE name = $1", [b.subject]);
+    if (!teacher.rows.length || !subject.rows.length) {
+      await client.query("ROLLBACK");
+      return reply.code(404).send({ error: !teacher.rows.length ? "Аккаунт преподавателя в TA-DC не найден" : "Такого предмета в TA-DC нет",
+        code: !teacher.rows.length ? "teacher_not_found" : "subject_not_found" });
+    }
+    const faculty = await client.query(
+      `INSERT INTO dc_new.faculties (name) VALUES ($1) ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id`,
+      [normalizeName(b.facultyName)]);
+    const program = await client.query(
+      `INSERT INTO dc_new.programs (faculty_id, name) VALUES ($1, $2)
+       ON CONFLICT (faculty_id, name) DO UPDATE SET name = EXCLUDED.name RETURNING id`,
+      [faculty.rows[0].id, normalizeName(b.programName)]);
+    const offer = await client.query(
+      `INSERT INTO dc_new.course_offers (teacher_id, discipline_id, program_id, total_groups) VALUES ($1, $2, $3, $4) RETURNING id`,
+      [b.teacherId, subject.rows[0].id, program.rows[0].id, b.totalGroups]);
+    for (const m of modules) {
+      await client.query(
+        `INSERT INTO dc_new.course_offer_modules (offer_id, module_id) SELECT $1, id FROM dc_new.modules WHERE number = $2`,
+        [offer.rows[0].id, m]);
+    }
+    await client.query("COMMIT");
+    app.log.info({ offerId: offer.rows[0].id, teacherId: b.teacherId }, "course offer created by DC");
+    return reply.code(201).send({ id: Number(offer.rows[0].id) });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+});
+
+/** Изменить число групп / модули или убрать предложение в архив (только если на нём нет броней). */
+app.post<{ Params: { id: string }; Body: DcOfferBody }>("/api/dc/service/offers/:id", { preHandler: [requireDcService] }, async (request, reply) => {
+  const id = Number(request.params.id);
+  const b = request.body ?? {};
+  const { rows } = await app.pg.query(
+    `SELECT co.id, coalesce((SELECT sum(num_groups) FROM dc_new.bookings WHERE offer_id = co.id AND status <> 'cancelled'), 0)::int AS booked
+     FROM dc_new.course_offers co WHERE co.id = $1`, [id]);
+  if (!rows[0]) return reply.code(404).send({ error: "Предложение в TA-DC не найдено", code: "offer_not_found" });
+  const booked = rows[0].booked as number;
+  if (b.archive) {
+    // как «Удалить курс» у преподавателя: без броней — в архив; с бронями убираются только свободные группы,
+    // а занятые остаются с ассистентами
+    if (booked > 0) {
+      await app.pg.query("UPDATE dc_new.course_offers SET total_groups = $2, updated_at = now() WHERE id = $1 AND total_groups > $2", [id, booked]);
+      return { ok: true, archived: false, bookedGroups: booked };
+    }
+    await app.pg.query("UPDATE dc_new.course_offers SET status = 'archived', updated_at = now() WHERE id = $1", [id]);
+    return { ok: true, archived: true, bookedGroups: 0 };
+  }
+  if (b.totalGroups !== undefined) {
+    if (b.totalGroups < 1) return reply.code(400).send({ error: "Число групп должно быть больше нуля" });
+    if (b.totalGroups < booked) return reply.code(409).send({ error: `Ассистенты уже заняли ${booked} гр. — меньше групп сделать нельзя`, code: "below_booked" });
+    await app.pg.query("UPDATE dc_new.course_offers SET total_groups = $2 WHERE id = $1", [id, b.totalGroups]);
+  }
+  const modules = b.modules ? [...new Set(b.modules.map(Number))].filter((m) => m >= 1 && m <= 4) : null;
+  if (modules?.length) {
+    await app.pg.query("DELETE FROM dc_new.course_offer_modules WHERE offer_id = $1", [id]);
+    for (const m of modules) {
+      await app.pg.query("INSERT INTO dc_new.course_offer_modules (offer_id, module_id) SELECT $1, id FROM dc_new.modules WHERE number = $2", [id, m]);
+    }
+  }
+  return { ok: true };
+});
+
+// Вкладка «Реестр DC»: курсы и договоры преподавателя из реестра (запрашиваются у реестра по внутренней сети).
+app.get("/api/dc/registry", { preHandler: [app.authenticate] }, async (request, reply) => {
+  const auth = request.user as { id: number; role: string };
+  if (auth.role !== "teacher") return reply.code(403).send({ error: "Раздел для преподавателей" });
+  const secret = process.env.DC_HANDOFF_SECRET;
+  if (!secret) return reply.code(503).send({ error: "Связь с реестром DC не настроена" });
+  const path = `/api/service/teacher?taDcId=${Number(auth.id)}`;
+  try {
+    const res = await fetch(`${DC_API_URL}${path}`, {
+      headers: { "x-dc-service": serviceSignature(secret, "GET", path) },
+      signal: AbortSignal.timeout(10_000),
+    });
+    const data = await res.json().catch(() => null);
+    return reply.code(res.status).send(data ?? { error: "Реестр DC не ответил" });
+  } catch {
+    return reply.code(502).send({ error: "Реестр DC сейчас недоступен" });
+  }
+});
+
+// Обратное направление: из реестра DC в TA-DC без повторного входа. Реестр подписывает ссылку тем же секретом,
+// но с приставкой "dc-to-ta-dc." — ссылку для одного сайта нельзя использовать на другом.
+// Каждая ссылка срабатывает один раз (использованные помним до истечения их срока; бэкенд один).
+const usedDcLinks = new Map<string, number>();
+
+app.post<{ Body: { t?: string } }>(
+  "/api/dc/login",
+  { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } },
+  async (request, reply) => {
+    const secret = process.env.DC_HANDOFF_SECRET;
+    const bad = (error: string) => reply.code(401).send({ error });
+    if (!secret) return bad("Вход из реестра DC не настроен");
+    const [data, mac, extra] = String(request.body?.t ?? "").split(".");
+    if (!data || !mac || extra !== undefined) return bad("Ссылка не подошла");
+    const expected = Buffer.from(createHmac("sha256", secret).update(`dc-to-ta-dc.${data}`).digest("base64url"));
+    const given = Buffer.from(mac);
+    if (expected.length !== given.length || !timingSafeEqual(expected, given)) return bad("Ссылка не подошла");
+    let p: { v?: number; aud?: string; sub?: number; iat?: number; exp?: number; jti?: string };
+    try {
+      p = JSON.parse(Buffer.from(data, "base64url").toString("utf8"));
+    } catch {
+      return bad("Ссылка не подошла");
+    }
+    const now = Math.floor(Date.now() / 1000);
+    if (p.v !== 1 || p.aud !== "ta-dc" || typeof p.sub !== "number" || typeof p.jti !== "string"
+      || typeof p.exp !== "number" || typeof p.iat !== "number" || p.exp < now || p.exp - p.iat > 120) {
+      return bad("Ссылка устарела — откройте TA-DC из реестра ещё раз");
+    }
+    for (const [jti, exp] of usedDcLinks) if (exp < now) usedDcLinks.delete(jti);
+    if (usedDcLinks.has(p.jti)) return bad("Ссылка уже использована — откройте TA-DC из реестра ещё раз");
+    usedDcLinks.set(p.jti, p.exp);
+
+    const { rows } = await app.pg.query(
+      "SELECT id, email, role, first_name, last_name FROM dc_new.users WHERE id = $1 AND role = 'teacher'",
+      [p.sub],
+    );
+    const u = rows[0];
+    if (!u) return bad("Аккаунт преподавателя в TA-DC не найден");
+    const token = app.jwt.sign({ id: u.id, email: u.email, role: u.role });
+    return {
+      token,
+      user: { id: u.id, email: u.email, role: u.role, firstName: u.first_name, lastName: u.last_name, questionnaireCompleted: null },
     };
   }
 );
@@ -441,6 +798,13 @@ app.put<{
            WHERE id = $5`,
           [firstName, lastName, middleName ?? null, email, authUser.id]
         );
+      }
+
+      if (authUser.role === "teacher") {
+        await tellDcAboutProfile({
+          taDcId: Number(authUser.id), lastName: lastName.trim(), firstName: firstName.trim(),
+          middleName: middleName?.trim() || null, email: email.trim(),
+        });
       }
 
       let questionnaireCompleted: boolean | null = null;

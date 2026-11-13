@@ -131,9 +131,12 @@ export function PersonalInfoBlock({ profile, onSaved }: PersonalInfoBlockProps) 
       </div>
 
       <div className="mt-4 space-y-1.5">
-        <Label htmlFor="pi-email">Логин</Label>
+        <Label htmlFor="pi-email">Логин (почта)</Label>
         <Input id="pi-email" type="text" value={form.email} disabled={saving}
           onChange={(e) => update("email", e.target.value)} />
+        <p className="text-xs text-muted-foreground">
+          С этой почтой вы входите в TA-DC. Преподаватели входят с ней и в реестр DC (admin.tadc-hse.ru) — с тем же паролем.
+        </p>
       </div>
 
       <div className="mt-6 pt-5 border-t border-gray-100 grid grid-cols-1 sm:grid-cols-2 gap-4">
